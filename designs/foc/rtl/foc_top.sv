@@ -190,8 +190,9 @@ module foc_top #(
 
     // ── Status signals ──
     assign status_busy = (state != ST_IDLE) && (state != ST_DONE);
-    assign status_done = (state == ST_DONE);
     assign status_error = 1'b0;  // reserved for future overflow detection
+
+    assign status_done = (state == ST_DONE);
 
     // ── Latch outputs on SVPWM done ──
     always_ff @(posedge clk or negedge rst_n) begin
