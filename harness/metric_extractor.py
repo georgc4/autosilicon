@@ -41,6 +41,13 @@ def extract_fe_metrics(design_dir: Path) -> dict:
         if stat_rpt:
             metrics.update(_parse_yosys_stat_rpt(stat_rpt))
 
+    # Extract fmax from Yosys log (ABC stime -p output)
+    yosys_log = _find_file(design_dir, "*yosys.log")
+    if yosys_log:
+        fmax = _extract_fmax_from_abc(yosys_log)
+        if fmax is not None:
+            metrics["estimated_fmax_mhz"] = fmax
+
     return metrics
 
 
@@ -75,15 +82,6 @@ def _parse_yosys_stat_json(path: Path) -> dict:
         "gate_count": gate_count,
         "area": area,
     }
-
-    # Try to extract fmax from ABC log if available
-    abc_log = path.parent / "yosys.log"
-    if not abc_log.is_file():
-        abc_log = path.parent.parent / "yosys.log"
-    if abc_log.is_file():
-        fmax = _extract_fmax_from_abc(abc_log)
-        if fmax is not None:
-            result["estimated_fmax_mhz"] = fmax
 
     return result
 

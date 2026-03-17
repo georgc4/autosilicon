@@ -207,6 +207,7 @@ def generate_yosys_script(
     script = script.replace("__JSON_OUT__", str(json_out))
     script = script.replace("__NETLIST_OUT__", str(netlist_out))
     script = script.replace("__LIBERTY_FILE__", liberty_file)
+    script = script.replace("__ABC_SCRIPT__", str(PROJ_ROOT / "infra" / "abc_sky130.script"))
 
     script_path = results_dir / f"config_{config_id:04d}.ys"
     script_path.write_text(script)

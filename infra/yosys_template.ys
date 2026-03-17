@@ -13,7 +13,7 @@ synth -top __DESIGN_TOP__ -flatten
 
 # ── Map to Sky130 cells ───────────────────────────────────────
 dfflibmap -liberty __LIBERTY_FILE__
-abc -liberty __LIBERTY_FILE__ -D 20000
+abc -liberty __LIBERTY_FILE__ -D 20000 -script __ABC_SCRIPT__
 
 # ── Statistics (with area from liberty) ───────────────────────
 stat -liberty __LIBERTY_FILE__

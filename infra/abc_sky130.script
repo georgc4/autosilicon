@@ -1,0 +1,10 @@
+strash
+dretime
+map {D}
+topo
+stime -p
+buffer
+upsize {D}
+dnsize {D}
+stime -p
+write_blif {W}
