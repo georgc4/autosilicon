@@ -75,7 +75,6 @@ def save_frontier(frontier: list[dict], path: Path) -> None:
 
 # Dimension definitions for each mode
 FE_DIMENSIONS = [
-    {"name": "gate_count", "direction": "minimize"},
     {"name": "area", "direction": "minimize"},
     {"name": "estimated_fmax_mhz", "direction": "maximize"},
 ]
