@@ -56,8 +56,7 @@ module foc_top #(
     // PI integrator debug (direct hierarchy access)
     logic signed [PI_ACC_W-1:0] dbg_pi_d_int, dbg_pi_q_int;
 
-    // Output registers
-    logic [PWM_BITS-1:0] reg_duty_a, reg_duty_b, reg_duty_c;
+    // Output registers (removed — SVPWM outputs are already registered)
 
     // ════════════════════════════════════════════════════════════════
     // FSM
@@ -187,22 +186,10 @@ module foc_top #(
 
     assign status_done = (state == ST_DONE);
 
-    // ── Latch outputs on SVPWM done ──
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            reg_duty_a <= '0;
-            reg_duty_b <= '0;
-            reg_duty_c <= '0;
-        end else if (svpwm_done) begin
-            reg_duty_a <= w_duty_a;
-            reg_duty_b <= w_duty_b;
-            reg_duty_c <= w_duty_c;
-        end
-    end
-
-    assign duty_a = reg_duty_a;
-    assign duty_b = reg_duty_b;
-    assign duty_c = reg_duty_c;
+    // Duty outputs read directly from SVPWM (already registered in submodule)
+    assign duty_a = w_duty_a;
+    assign duty_b = w_duty_b;
+    assign duty_c = w_duty_c;
 
     // ── IRQ: pulse on entering DONE ──
     logic state_was_svpwm;
@@ -300,9 +287,9 @@ module foc_top #(
             8'h28: wb_dat_o = {{(32-DATA_W){reg_int_max[DATA_W-1]}}, reg_int_max};
             8'h2C: wb_dat_o = {{(32-DATA_W){reg_kp_q[DATA_W-1]}}, reg_kp_q};
             8'h30: wb_dat_o = {{(32-DATA_W){reg_ki_q[DATA_W-1]}}, reg_ki_q};
-            8'h40: wb_dat_o = {{(32-PWM_BITS){1'b0}}, reg_duty_a};
-            8'h44: wb_dat_o = {{(32-PWM_BITS){1'b0}}, reg_duty_b};
-            8'h48: wb_dat_o = {{(32-PWM_BITS){1'b0}}, reg_duty_c};
+            8'h40: wb_dat_o = {{(32-PWM_BITS){1'b0}}, w_duty_a};
+            8'h44: wb_dat_o = {{(32-PWM_BITS){1'b0}}, w_duty_b};
+            8'h48: wb_dat_o = {{(32-PWM_BITS){1'b0}}, w_duty_c};
             8'h50: wb_dat_o = {{(32-DATA_W){w_id[DATA_W-1]}}, w_id};
             8'h54: wb_dat_o = {{(32-DATA_W){w_iq[DATA_W-1]}}, w_iq};
             8'h58: wb_dat_o = {{(32-DATA_W){w_ialpha[DATA_W-1]}}, w_ialpha};
