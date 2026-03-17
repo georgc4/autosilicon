@@ -36,8 +36,6 @@ module foc_pi #(
 
     localparam signed [DATA_W-1:0]    POS_MAX = {1'b0, {(DATA_W-1){1'b1}}};
     localparam signed [DATA_W-1:0]    NEG_MIN = {1'b1, {(DATA_W-1){1'b0}}};
-    localparam signed [PI_ACC_W-1:0]  ACC_MAX = {1'b0, {(PI_ACC_W-1){1'b1}}};
-    localparam signed [PI_ACC_W-1:0]  ACC_MIN = {1'b1, {(PI_ACC_W-1){1'b0}}};
     localparam int PI_PROD_W = 2 * DATA_W;
 
     // ── Integrator state (persistent across FOC iterations) ──
@@ -63,14 +61,6 @@ module foc_pi #(
         if (val > $signed({1'b0, POS_MAX})) clamp_dw = POS_MAX;
         else if (val < $signed({1'b1, NEG_MIN})) clamp_dw = NEG_MIN;
         else clamp_dw = val[DATA_W-1:0];
-    endfunction
-
-    function automatic signed [PI_ACC_W-1:0] clamp_acc(
-        input signed [PI_ACC_W:0] val
-    );
-        if (val > $signed({1'b0, ACC_MAX})) clamp_acc = ACC_MAX;
-        else if (val < $signed({1'b1, ACC_MIN})) clamp_acc = ACC_MIN;
-        else clamp_acc = val[PI_ACC_W-1:0];
     endfunction
 
     // ── Stage 1: Compute error with saturation ──
@@ -114,19 +104,20 @@ module foc_pi #(
     end
 
     // ── Stage 3: Accumulate and clamp integrator ──
+    // int_max_ext is always < ACC_MAX (16-bit int_max shifted by 15 = 30 bits max,
+    // well within 32-bit accumulator), so clamping directly to int_max_ext subsumes
+    // the overflow clamp — no need for a separate ACC_MAX/ACC_MIN check.
     logic signed [PI_ACC_W:0]   u_i_tent_wide;
-    logic signed [PI_ACC_W-1:0] u_i_tent, u_i_int_clamped;
+    logic signed [PI_ACC_W-1:0] u_i_int_clamped;
 
     always_comb begin
         u_i_tent_wide = {u_i[PI_ACC_W-1], u_i} + {delta_s2[PI_ACC_W-1], delta_s2};
-        u_i_tent = clamp_acc(u_i_tent_wide);
-        // Integrator magnitude clamp
-        if (u_i_tent > int_max_ext)
+        if (u_i_tent_wide > $signed({1'b0, int_max_ext}))
             u_i_int_clamped = int_max_ext;
-        else if (u_i_tent < -int_max_ext)
+        else if (u_i_tent_wide < -$signed({1'b0, int_max_ext}))
             u_i_int_clamped = -int_max_ext;
         else
-            u_i_int_clamped = u_i_tent;
+            u_i_int_clamped = u_i_tent_wide[PI_ACC_W-1:0];
     end
 
     always_ff @(posedge clk or negedge rst_n) begin
