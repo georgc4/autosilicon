@@ -52,8 +52,6 @@ module foc_pi #(
     logic                        error_sign_s2;
 
     logic signed [PI_ACC_W-1:0]  u_i_clamped_s3;
-    logic signed [DATA_W-1:0]    u_p_s3;
-    logic                        error_sign_s3;
 
     // ── int_max extended to accumulator scale ──
     // int_max is Q(INT_W).(FRAC_W); shift left by FRAC_W to align with accumulator
@@ -132,17 +130,10 @@ module foc_pi #(
     end
 
     always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            u_p_s3   <= '0;
-            error_sign_s3 <= '0;
+        if (!rst_n)
             valid_s3 <= 1'b0;
-        end else begin
+        else
             valid_s3 <= valid_s2;
-            if (valid_s2) begin
-                u_p_s3   <= u_p_s2;
-                error_sign_s3 <= error_sign_s2;
-            end
-        end
     end
 
     // ── Stage 4: Output sum, clamp, anti-windup ──
@@ -155,10 +146,10 @@ module foc_pi #(
         // Extract DATA_W-bit value from accumulator by >>> FRAC_W
         u_i_shifted = u_i_int_clamped >>> FRAC_W;
         u_i_out     = u_i_shifted[DATA_W-1:0];
-        u_raw       = {u_p_s3[DATA_W-1], u_p_s3} + {u_i_out[DATA_W-1], u_i_out};
+        u_raw       = {u_p_s2[DATA_W-1], u_p_s2} + {u_i_out[DATA_W-1], u_i_out};
         saturated   = (u_raw > $signed({1'b0, out_max})) ||
                       (u_raw < -$signed({1'b0, out_max}));
-        same_sign   = (error_sign_s3 == u_raw[DATA_W]);
+        same_sign   = (error_sign_s2 == u_raw[DATA_W]);
     end
 
     always_ff @(posedge clk or negedge rst_n) begin
