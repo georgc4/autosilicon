@@ -78,6 +78,9 @@ module foc_top #(
     logic inv_park_en,  inv_park_done;
     logic svpwm_en,     svpwm_done;
 
+    // Stored sin/cos for reuse in Park and Inverse Park
+    logic signed [DATA_W-1:0] stored_sin, stored_cos;
+
     // ── Datapath wires ──
     logic signed [DATA_W-1:0] w_ialpha, w_ibeta;
     logic signed [DATA_W-1:0] w_id, w_iq;
@@ -216,6 +219,17 @@ module foc_top #(
         end else begin
             state_was_svpwm <= (state == ST_SVPWM);
             irq <= state_was_svpwm && (state == ST_DONE);
+        end
+    end
+
+    // ── Store sin/cos from CORDIC ──
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            stored_sin <= '0;
+            stored_cos <= '0;
+        end else if (cordic_done) begin
+            stored_sin <= w_sin;
+            stored_cos <= w_cos;
         end
     end
 
@@ -396,8 +410,8 @@ module foc_top #(
         .en     (park_en),
         .i_alpha(w_ialpha),
         .i_beta (w_ibeta),
-        .sin_val(w_sin),
-        .cos_val(w_cos),
+        .sin_val(stored_sin),
+        .cos_val(stored_cos),
         .i_d    (w_id),
         .i_q    (w_iq),
         .done   (park_done)
@@ -469,8 +483,8 @@ module foc_top #(
         .en     (inv_park_en),
         .v_d    (w_vd),
         .v_q    (w_vq),
-        .sin_val(w_sin),
-        .cos_val(w_cos),
+        .sin_val(stored_sin),
+        .cos_val(stored_cos),
         .v_alpha(w_valpha),
         .v_beta (w_vbeta),
         .done   (inv_park_done)
