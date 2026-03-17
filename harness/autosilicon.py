@@ -189,29 +189,23 @@ def invoke_claude(prompt: str, design_dir: Path, model: str | None = None,
         cmd.extend(["--model", model])
 
     log.info("Invoking Claude Code CLI (timeout=%ds)...", timeout)
-
-    # Write prompt to temp file to avoid arg length limits
-    prompt_file = design_dir / ".autosilicon_prompt.txt"
-    prompt_file.write_text(prompt)
-
     try:
-        # stdout/stderr go to terminal (not captured) so SIGINT propagates
-        # Claude's description is extracted from git diff instead
-        result = subprocess.run(
-            cmd, cwd=design_dir, timeout=timeout,
+        # Put claude in its own process group so it doesn't steal our SIGINT
+        proc = subprocess.Popen(
+            cmd, cwd=design_dir, start_new_session=True,
         )
-        if result.returncode != 0:
-            log.warning("Claude CLI exited with code %d", result.returncode)
+        proc.wait(timeout=timeout)
+        if proc.returncode != 0:
+            log.warning("Claude CLI exited with code %d", proc.returncode)
             return False, ""
         return True, ""
     except subprocess.TimeoutExpired:
+        os.killpg(proc.pid, 9)
         log.warning("Claude CLI timed out after %ds", timeout)
         return False, ""
     except FileNotFoundError:
         log.error("Claude CLI not found — is 'claude' on PATH?")
         return False, ""
-    finally:
-        prompt_file.unlink(missing_ok=True)
 
 
 def invoke_claude_with_retry(prompt: str, design_dir: Path,
