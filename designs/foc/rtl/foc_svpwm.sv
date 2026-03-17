@@ -76,15 +76,28 @@ module foc_svpwm #(
         end
     end
 
-    // ── Stage 2: Min/Max and offset ──
-    logic signed [DATA_W-1:0] vmax, vmin, voffset;
-    logic signed [DATA_W-1:0] va_s2, vb_s2, vc_s2;
+    // ── Stage 2: Valid delay only (min/max/offset computed combinationally in stage 3) ──
     logic                     valid_s2;
 
-    // Share 3 comparators between min and max (instead of 6 separate ones)
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n)
+            valid_s2 <= 1'b0;
+        else
+            valid_s2 <= valid_s1;
+    end
+
+    // ── Stage 3: Min/Max offset + Scale to PWM range ──
+    // v_alpha, vb_s1, vc_s1 are all stable registered values during stage 3
+    // (FSM serializes SVPWM execution), so min/max/offset can be combinational here.
+    logic signed [DATA_W-1:0] vmax, vmin, voffset;
     logic a_ge_b, b_ge_c, a_ge_c;
+    logic signed [DATA_W-1:0] va_adj, vb_adj, vc_adj;
+    logic signed [DATA_W+PWM_BITS-1:0] scale_a, scale_b, scale_c;
+    logic signed [PWM_BITS+1:0]        duty_a_raw, duty_b_raw, duty_c_raw;
+    logic                              valid_s3;
 
     always_comb begin
+        // Share 3 comparators between min and max
         a_ge_b = (v_alpha >= vb_s1);
         b_ge_c = (vb_s1 >= vc_s1);
         a_ge_c = (v_alpha >= vc_s1);
@@ -106,34 +119,16 @@ module foc_svpwm #(
             vmin = vc_s1;
 
         voffset = -(vmax + vmin) >>> 1;
-    end
 
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            va_s2    <= '0;
-            vb_s2    <= '0;
-            vc_s2    <= '0;
-            valid_s2 <= 1'b0;
-        end else begin
-            valid_s2 <= valid_s1;
-            if (valid_s1) begin
-                va_s2 <= v_alpha + voffset;
-                vb_s2 <= vb_s1 + voffset;
-                vc_s2 <= vc_s1 + voffset;
-            end
-        end
-    end
+        // Offset-adjusted phase voltages (combinational, no pipeline register needed)
+        va_adj = v_alpha + voffset;
+        vb_adj = vb_s1 + voffset;
+        vc_adj = vc_s1 + voffset;
 
-    // ── Stage 3: Scale to PWM range ──
-    // duty = half + (vx_adj * pwm_max) >> FRAC_W
-    logic signed [DATA_W+PWM_BITS-1:0] scale_a, scale_b, scale_c;
-    logic signed [PWM_BITS+1:0]        duty_a_raw, duty_b_raw, duty_c_raw;
-    logic                              valid_s3;
-
-    always_comb begin
-        scale_a = va_s2 * $signed((PWM_BITS+1)'(PWM_MAX_L));
-        scale_b = vb_s2 * $signed((PWM_BITS+1)'(PWM_MAX_L));
-        scale_c = vc_s2 * $signed((PWM_BITS+1)'(PWM_MAX_L));
+        // Scale to PWM range: duty = half + (vx_adj * pwm_max) >> FRAC_W
+        scale_a = va_adj * $signed((PWM_BITS+1)'(PWM_MAX_L));
+        scale_b = vb_adj * $signed((PWM_BITS+1)'(PWM_MAX_L));
+        scale_c = vc_adj * $signed((PWM_BITS+1)'(PWM_MAX_L));
 
         duty_a_raw = $signed((PWM_BITS+2)'(HALF_SCALE_L)) + (PWM_BITS+2)'(scale_a >>> FRAC_W);
         duty_b_raw = $signed((PWM_BITS+2)'(HALF_SCALE_L)) + (PWM_BITS+2)'(scale_b >>> FRAC_W);
