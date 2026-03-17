@@ -544,7 +544,13 @@ def main() -> None:
             })
             continue
 
-        description = claude_desc or extract_change_description(design_dir)
+        # Read Claude's summary from file, fall back to git diff description
+        summary_file = design_dir / "rtl" / ".change_summary"
+        if summary_file.is_file():
+            description = summary_file.read_text().strip() or extract_change_description(design_dir)
+            summary_file.unlink(missing_ok=True)
+        else:
+            description = claude_desc or extract_change_description(design_dir)
         log.info("Committed %s: %s", commit, description)
 
         # ── 5. Run evaluation ─────────────────────────────────────

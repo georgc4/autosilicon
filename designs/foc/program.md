@@ -5,7 +5,7 @@ Make ONE focused RTL change to reduce area (µm²) and/or improve fmax (MHz) whi
 Your change is kept if it's Pareto-improving on area (minimize) × fmax (maximize).
 Only edit .sv files in rtl/. Do NOT touch tb/, synth/, openlane/, or Makefile.
 
-After your edit, write a one-line summary of what you changed and why.
+After your edit, write a one-line summary of what you changed and why to the file rtl/.change_summary (overwrite it each time).
 
 DO NOT remove or merge FSM states (like S_DONE) — the pipeline timing and
 handshake signals depend on exact cycle counts. Tests verify latency.

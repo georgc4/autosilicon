@@ -11,3 +11,4 @@ designs/*/.autosilicon_*
 *.log
 results.tsv
 pareto_frontier.json
+.change_summary
