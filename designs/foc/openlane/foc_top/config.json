@@ -1,0 +1,52 @@
+{
+    "DESIGN_NAME": "foc_top",
+    "FP_PDN_MULTILAYER": false,
+
+    "VERILOG_FILES": [
+        "dir::src/foc_pkg.sv",
+        "dir::src/foc_cordic.sv",
+        "dir::src/foc_clarke.sv",
+        "dir::src/foc_park.sv",
+        "dir::src/foc_inv_park.sv",
+        "dir::src/foc_pi.sv",
+        "dir::src/foc_svpwm.sv",
+        "dir::src/foc_top.sv"
+    ],
+
+    "CLOCK_PORT": "clk",
+    "CLOCK_PERIOD": 20.0,
+
+    "VERILOG_DEFINES": [],
+
+    "SYNTH_PARAMETERS": [
+        "DATA_W=16",
+        "FRAC_W=15",
+        "CORDIC_ITERS=16",
+        "PIPE_DEPTH=1",
+        "ANGLE_W=16",
+        "PI_ACC_W=32",
+        "SINCOS_MODE=0",
+        "PWM_BITS=10",
+        "SHARED_MUL=0",
+        "ROUND_MODE=0"
+    ],
+
+    "FP_CORE_UTIL": 50,
+    "PL_TARGET_DENSITY_PCT": 55,
+    "FP_SIZING": "absolute",
+    "DIE_AREA": [0, 0, 1500, 1500],
+    "CORE_AREA": [20, 20, 1480, 1480],
+
+    "FP_PIN_ORDER_CFG": "dir::pin_order.cfg",
+
+    "PL_SKIP_INITIAL_PLACEMENT": false,
+
+    "RUN_ANTENNA_REPAIR": true,
+
+    "DRT_THREADS": 4,
+
+    "meta": {
+        "version": 2,
+        "flow": "Classic"
+    }
+}

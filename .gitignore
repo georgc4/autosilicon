@@ -1,0 +1,11 @@
+.venv/
+openlane2/
+__pycache__/
+*.pyc
+*.vcd
+sim_build/
+results.xml
+designs/*/synth/results/
+designs/*/autosilicon.log
+designs/*/.autosilicon_*
+*.log

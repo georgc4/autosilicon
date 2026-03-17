@@ -1,0 +1,115 @@
+# FOC Motor Coprocessor — Synthesis Sweep Configuration
+
+# Design identification
+design:
+  name: "foc"
+  top_module: "foc_top"
+
+# RTL files in read order (package first)
+rtl_files:
+  - "rtl/foc_pkg.sv"
+  - "rtl/foc_cordic.sv"
+  - "rtl/foc_clarke.sv"
+  - "rtl/foc_park.sv"
+  - "rtl/foc_inv_park.sv"
+  - "rtl/foc_pi.sv"
+  - "rtl/foc_svpwm.sv"
+  - "rtl/foc_ctrl.sv"
+  - "rtl/foc_wb.sv"
+  - "rtl/foc_top.sv"
+
+# Default parameter values (matching foc_pkg.sv defaults)
+defaults:
+  DATA_W: 16
+  FRAC_W: 15
+  CORDIC_ITERS: 16
+  PIPE_DEPTH: 1
+  PWM_BITS: 10
+  SHARED_MUL: 0
+  ANGLE_W: 16
+  PI_ACC_W: 32  # 2*DATA_W by default; overrides here for explicit control
+  SINCOS_MODE: 0
+  ROUND_MODE: 0
+
+# Full parameter ranges
+parameters:
+  DATA_W:
+    values: [12, 16, 24, 32]
+    description: "Total fixed-point word width (bits)"
+  FRAC_W:
+    derive_from: "DATA_W - 1"
+    description: "Fractional bits (DATA_W-1 for Q1.N format)"
+  CORDIC_ITERS:
+    values: [8, 12, 16, 20]
+    description: "CORDIC iteration count (precision vs area/latency)"
+  PIPE_DEPTH:
+    values: [0, 1, 2]
+    description: "Pipeline stages (0=combinational, 1-2=pipelined)"
+  PWM_BITS:
+    values: [8, 10, 12]
+    description: "PWM counter resolution (bits)"
+  SHARED_MUL:
+    values: [0, 1]
+    description: "0=dedicated multipliers, 1=shared/time-multiplexed"
+
+# Sweep presets
+presets:
+  quick:
+    description: "Fast smoke test (~6 configs)"
+    DATA_W: [16]
+    FRAC_W: [15]
+    CORDIC_ITERS: [16]
+    PIPE_DEPTH: [0, 1]
+    PWM_BITS: [10]
+    SHARED_MUL: [0, 1]
+
+  medium:
+    description: "Design-space exploration (~54 configs)"
+    DATA_W: [12, 16, 24]
+    CORDIC_ITERS: [8, 12, 16]
+    PIPE_DEPTH: [0, 1, 2]
+    PWM_BITS: [10]
+    SHARED_MUL: [0, 1]
+
+  full:
+    description: "Exhaustive sweep (~162 configs)"
+    DATA_W: [12, 16, 24, 32]
+    CORDIC_ITERS: [8, 12, 16, 20]
+    PIPE_DEPTH: [0, 1, 2]
+    PWM_BITS: [8, 10, 12]
+    SHARED_MUL: [0, 1]
+
+# RTL preprocessing config (for infra/prep_rtl.py)
+prep_rtl:
+  pkg_name: "foc_pkg"
+  pkg_types:
+    - "foc_state_t"
+    - "ST_IDLE"
+    - "ST_SINCOS"
+    - "ST_CLARKE"
+    - "ST_PARK"
+    - "ST_PI_D"
+    - "ST_PI_Q"
+    - "ST_INV_PARK"
+    - "ST_SVPWM"
+    - "ST_DONE"
+    - "atan_lut"
+    - "CORDIC_GAIN"
+    - "INV_SQRT3"
+    - "SQRT3_INT"
+    - "PWM_MAX"
+    - "HALF_SCALE"
+    - "INT_W"
+    - "PRODUCT_W"
+    - "PI_FRAC_W"
+
+# Sky130 liberty file path (override via CLI or env var LIBERTY_FILE)
+sky130:
+  liberty_file: "${OPENLANE_ROOT}/sky130A/libs.ref/sky130_fd_sc_hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib"
+  fallback: "generic"
+
+# Synthesis options
+synthesis:
+  yosys_binary: "yosys"
+  parallel_jobs: 4
+  timeout_seconds: 120

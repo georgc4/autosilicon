@@ -1,0 +1,48 @@
+# AutoSilicon — Synthesis Sweep Configuration Template
+# =====================================================
+# Copy this to designs/<name>/synth/synth_config.yaml and customize
+# for your design.
+
+# Design identification
+design:
+  name: "my_design"
+  top_module: "my_top"
+
+# RTL files in read order (package first)
+rtl_files:
+  - "rtl/my_pkg.sv"
+  - "rtl/my_top.sv"
+
+# Default parameter values (matching RTL defaults)
+defaults:
+  DATA_W: 32
+  FRAC_W: 16
+
+# Full parameter ranges
+parameters:
+  DATA_W:
+    values: [16, 24, 32]
+    description: "Word width (bits)"
+  FRAC_W:
+    derive_from: "DATA_W // 2"
+    description: "Fractional bits"
+
+# Sweep presets
+presets:
+  quick:
+    description: "Fast smoke test"
+    DATA_W: [32]
+  medium:
+    description: "Design-space exploration"
+    DATA_W: [16, 24, 32]
+
+# Sky130 liberty file path
+sky130:
+  liberty_file: "${OPENLANE_ROOT}/sky130A/libs.ref/sky130_fd_sc_hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib"
+  fallback: "generic"
+
+# Synthesis options
+synthesis:
+  yosys_binary: "yosys"
+  parallel_jobs: 4
+  timeout_seconds: 120
