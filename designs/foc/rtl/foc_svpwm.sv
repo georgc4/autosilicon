@@ -81,19 +81,26 @@ module foc_svpwm #(
     logic signed [DATA_W-1:0] va_s2, vb_s2, vc_s2;
     logic                     valid_s2;
 
+    // Share 3 comparators between min and max (instead of 6 separate ones)
+    logic a_ge_b, b_ge_c, a_ge_c;
+
     always_comb begin
+        a_ge_b = (v_alpha >= vb_s1);
+        b_ge_c = (vb_s1 >= vc_s1);
+        a_ge_c = (v_alpha >= vc_s1);
+
         // 3-input max
-        if (v_alpha >= vb_s1 && v_alpha >= vc_s1)
+        if (a_ge_b && a_ge_c)
             vmax = v_alpha;
-        else if (vb_s1 >= vc_s1)
+        else if (!a_ge_b && b_ge_c)
             vmax = vb_s1;
         else
             vmax = vc_s1;
 
-        // 3-input min
-        if (v_alpha <= vb_s1 && v_alpha <= vc_s1)
+        // 3-input min (reuses same comparator results)
+        if (!a_ge_b && !a_ge_c)
             vmin = v_alpha;
-        else if (vb_s1 <= vc_s1)
+        else if (a_ge_b && !b_ge_c)
             vmin = vb_s1;
         else
             vmin = vc_s1;
