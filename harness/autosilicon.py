@@ -478,7 +478,7 @@ def main() -> None:
 
         # ── 2. Invoke Claude ─────────────────────────────────────
         claude_ok, claude_desc = invoke_claude_with_retry(
-            prompt, design_dir, model=args.claude_model, timeout=600,
+            prompt, design_dir, model=args.claude_model, timeout=900,
         )
 
         if not claude_ok:
@@ -594,8 +594,6 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except KeyboardInterrupt:
-        log.info("\nInterrupted by user — exiting cleanly.")
-        sys.exit(130)
+    import signal
+    signal.signal(signal.SIGINT, lambda *_: (log.info("\nInterrupted."), os._exit(130)))
+    main()
