@@ -143,11 +143,7 @@ module foc_cordic #(
                     cos_val <= cos_corrected;
                     sin_val <= sin_corrected;
                     done    <= 1'b1;
-                    cstate  <= S_DONE;
-                end
-
-                S_DONE: begin
-                    cstate <= S_IDLE;
+                    cstate  <= S_IDLE;
                 end
 
                 default: cstate <= S_IDLE;
