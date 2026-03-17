@@ -359,66 +359,60 @@ module foc_top #(
         .done   (park_done)
     );
 
-    // ── Shared PI (D and Q axes time-multiplexed) ──
-    logic pi_clear;
-    assign pi_clear = reg_clear || reg_pi_reset;
-
-    // Q-axis gain fallback
-    logic signed [DATA_W-1:0] pi_q_kp, pi_q_ki;
-    assign pi_q_kp = (reg_kp_q != '0) ? reg_kp_q : reg_kp;
-    assign pi_q_ki = (reg_ki_q != '0) ? reg_ki_q : reg_ki;
-
-    // Input mux: select D or Q based on which enable is active
-    logic pi_en, pi_channel;
-    logic signed [DATA_W-1:0] pi_ref, pi_meas, pi_kp, pi_ki;
-    logic signed [DATA_W-1:0] pi_out;
-    logic pi_done_sig;
-
-    assign pi_en      = pi_d_en || pi_q_en;
-    assign pi_channel = pi_q_en;
-    assign pi_ref     = pi_q_en ? reg_iq_ref : reg_id_ref;
-    assign pi_meas    = pi_q_en ? w_iq       : w_id;
-    assign pi_kp      = pi_q_en ? pi_q_kp    : reg_kp;
-    assign pi_ki      = pi_q_en ? pi_q_ki    : reg_ki;
-    assign pi_d_done  = pi_done_sig;
-    assign pi_q_done  = pi_done_sig;
+    // ── PI D-axis ──
+    logic pi_d_clear;
+    assign pi_d_clear = reg_clear || reg_pi_reset;
 
     foc_pi #(
         .DATA_W  (DATA_W),
         .FRAC_W  (FRAC_W),
         .PI_ACC_W(PI_ACC_W)
-    ) u_pi (
+    ) u_pi_d (
         .clk     (clk),
         .rst_n   (rst_n),
-        .en      (pi_en),
-        .clear   (pi_clear),
-        .channel (pi_channel),
-        .ref_val (pi_ref),
-        .meas_val(pi_meas),
-        .kp      (pi_kp),
-        .ki      (pi_ki),
+        .en      (pi_d_en),
+        .clear   (pi_d_clear),
+        .ref_val (reg_id_ref),
+        .meas_val(w_id),
+        .kp      (reg_kp),
+        .ki      (reg_ki),
         .out_max (reg_out_max),
         .int_max (reg_int_max),
-        .out_val (pi_out),
-        .done    (pi_done_sig)
+        .out_val (w_vd),
+        .done    (pi_d_done)
     );
 
-    // Latch D/Q outputs from shared PI
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            w_vd <= '0;
-            w_vq <= '0;
-        end else begin
-            if (pi_done_sig && state == ST_PI_D)
-                w_vd <= pi_out;
-            if (pi_done_sig && state == ST_PI_Q)
-                w_vq <= pi_out;
-        end
-    end
+    // ── PI Q-axis ──
+    // Use separate q-axis gains if non-zero, else fall back to d-axis gains
+    logic signed [DATA_W-1:0] pi_q_kp, pi_q_ki;
+    assign pi_q_kp = (reg_kp_q != '0) ? reg_kp_q : reg_kp;
+    assign pi_q_ki = (reg_ki_q != '0) ? reg_ki_q : reg_ki;
+
+    logic pi_q_clear;
+    assign pi_q_clear = reg_clear || reg_pi_reset;
+
+    foc_pi #(
+        .DATA_W  (DATA_W),
+        .FRAC_W  (FRAC_W),
+        .PI_ACC_W(PI_ACC_W)
+    ) u_pi_q (
+        .clk     (clk),
+        .rst_n   (rst_n),
+        .en      (pi_q_en),
+        .clear   (pi_q_clear),
+        .ref_val (reg_iq_ref),
+        .meas_val(w_iq),
+        .kp      (pi_q_kp),
+        .ki      (pi_q_ki),
+        .out_max (reg_out_max),
+        .int_max (reg_int_max),
+        .out_val (w_vq),
+        .done    (pi_q_done)
+    );
 
     // ── PI integrator debug readback ──
-    assign dbg_pi_d_int = u_pi.u_i_ch0;
-    assign dbg_pi_q_int = u_pi.u_i_ch1;
+    assign dbg_pi_d_int = u_pi_d.u_i;
+    assign dbg_pi_q_int = u_pi_q.u_i;
 
     // ── Inverse Park ──
     foc_inv_park #(
