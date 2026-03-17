@@ -173,54 +173,75 @@ def check_scope(design_dir: Path, mode: str) -> bool:
 # ── Claude CLI invocation ─────────────────────────────────────────
 
 def invoke_claude(prompt: str, design_dir: Path, model: str | None = None,
-                  timeout: int = 600) -> bool:
-    """Invoke Claude Code CLI with the given prompt. Returns True on success."""
+                  timeout: int = 600) -> tuple[bool, str]:
+    """Invoke Claude Code CLI. Returns (success, last_line_of_output)."""
+    import select
+
     cmd = ["claude", "-p", prompt, "--allowedTools", CLAUDE_ALLOWED_TOOLS]
     if model:
         cmd.extend(["--model", model])
 
     log.info("Invoking Claude Code CLI (timeout=%ds)...", timeout)
     proc = None
+    last_line = ""
     try:
         proc = subprocess.Popen(
             cmd, cwd=design_dir, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            text=True, bufsize=1,
+            text=True,
         )
-        for line in proc.stdout:
-            log.info("[claude] %s", line.rstrip("\n"))
+        while True:
+            ready, _, _ = select.select([proc.stdout], [], [], 1.0)
+            if ready:
+                line = proc.stdout.readline()
+                if not line:
+                    break
+                stripped = line.rstrip("\n")
+                if stripped:
+                    last_line = stripped
+                log.info("[claude] %s", stripped)
+            elif proc.poll() is not None:
+                for line in proc.stdout:
+                    stripped = line.rstrip("\n")
+                    if stripped:
+                        last_line = stripped
+                    log.info("[claude] %s", stripped)
+                break
+
         proc.wait(timeout=timeout)
         if proc.returncode != 0:
             log.warning("Claude CLI exited with code %d", proc.returncode)
-            return False
-        return True
+            return False, last_line
+        return True, last_line
     except subprocess.TimeoutExpired:
         if proc:
             proc.kill()
         log.warning("Claude CLI timed out after %ds", timeout)
-        return False
+        return False, last_line
     except KeyboardInterrupt:
+        log.info("Interrupted — killing Claude subprocess...")
         if proc:
-            proc.terminate()
-            proc.wait(timeout=5)
+            proc.kill()
+            proc.wait()
         raise
     except FileNotFoundError:
         log.error("Claude CLI not found — is 'claude' on PATH?")
-        return False
+        return False, ""
 
 
 def invoke_claude_with_retry(prompt: str, design_dir: Path,
                              model: str | None = None,
-                             timeout: int = 600) -> bool:
-    """Invoke Claude with exponential backoff retries."""
+                             timeout: int = 600) -> tuple[bool, str]:
+    """Invoke Claude with exponential backoff retries. Returns (success, description)."""
     for attempt in range(MAX_RETRIES):
-        if invoke_claude(prompt, design_dir, model, timeout):
-            return True
+        ok, desc = invoke_claude(prompt, design_dir, model, timeout)
+        if ok:
+            return True, desc
         if attempt < MAX_RETRIES - 1:
             wait = RETRY_BACKOFF_BASE * (2 ** attempt)
             log.info("Retrying in %ds (attempt %d/%d)...", wait, attempt + 2, MAX_RETRIES)
             time.sleep(wait)
     log.error("Claude CLI failed after %d attempts", MAX_RETRIES)
-    return False
+    return False, ""
 
 
 # ── Evaluation ────────────────────────────────────────────────────
@@ -482,7 +503,7 @@ def main() -> None:
         )
 
         # ── 2. Invoke Claude ─────────────────────────────────────
-        claude_ok = invoke_claude_with_retry(
+        claude_ok, claude_desc = invoke_claude_with_retry(
             prompt, design_dir, model=args.claude_model, timeout=600,
         )
 
@@ -534,7 +555,7 @@ def main() -> None:
             })
             continue
 
-        description = extract_change_description(design_dir)
+        description = claude_desc or extract_change_description(design_dir)
         log.info("Committed %s: %s", commit, description)
 
         # ── 5. Run evaluation ─────────────────────────────────────
