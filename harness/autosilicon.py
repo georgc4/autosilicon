@@ -189,8 +189,13 @@ def invoke_claude(prompt: str, design_dir: Path, model: str | None = None,
         cmd.extend(["--model", model])
 
     log.info("Invoking Claude Code CLI (timeout=%ds)...", timeout)
+    # Save terminal state before claude mangles it
     try:
-        # Put claude in its own process group so it doesn't steal our SIGINT
+        saved_tty = subprocess.run(["stty", "-g"], capture_output=True, text=True).stdout.strip()
+    except Exception:
+        saved_tty = None
+
+    try:
         proc = subprocess.Popen(
             cmd, cwd=design_dir, start_new_session=True,
         )
@@ -206,6 +211,12 @@ def invoke_claude(prompt: str, design_dir: Path, model: str | None = None,
     except FileNotFoundError:
         log.error("Claude CLI not found — is 'claude' on PATH?")
         return False, ""
+    finally:
+        # Always restore terminal state
+        if saved_tty:
+            subprocess.run(["stty", saved_tty], check=False)
+        else:
+            subprocess.run(["stty", "sane"], check=False)
 
 
 def invoke_claude_with_retry(prompt: str, design_dir: Path,
