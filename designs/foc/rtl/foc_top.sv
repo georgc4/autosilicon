@@ -53,11 +53,7 @@ module foc_top #(
     logic signed [DATA_W-1:0]  reg_out_max, reg_int_max;
     logic signed [DATA_W-1:0]  reg_kp_q, reg_ki_q;
 
-    // Debug readback registers
-    logic signed [DATA_W-1:0]  dbg_id, dbg_iq;
-    logic signed [DATA_W-1:0]  dbg_ialpha, dbg_ibeta;
-    logic signed [DATA_W-1:0]  dbg_vd, dbg_vq;
-    logic signed [DATA_W-1:0]  dbg_valpha, dbg_vbeta;
+    // Debug readback: read directly from submodule registered outputs (no extra FFs)
     logic signed [PI_ACC_W-1:0] dbg_pi_d_int, dbg_pi_q_int;
 
     // Output registers
@@ -234,36 +230,7 @@ module foc_top #(
         end
     end
 
-    // ── Debug register latching ──
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            dbg_ialpha <= '0;
-            dbg_ibeta  <= '0;
-            dbg_id     <= '0;
-            dbg_iq     <= '0;
-            dbg_vd     <= '0;
-            dbg_vq     <= '0;
-            dbg_valpha <= '0;
-            dbg_vbeta  <= '0;
-        end else begin
-            if (clarke_done) begin
-                dbg_ialpha <= w_ialpha;
-                dbg_ibeta  <= w_ibeta;
-            end
-            if (park_done) begin
-                dbg_id <= w_id;
-                dbg_iq <= w_iq;
-            end
-            if (pi_d_done)
-                dbg_vd <= w_vd;
-            if (pi_q_done)
-                dbg_vq <= w_vq;
-            if (inv_park_done) begin
-                dbg_valpha <= w_valpha;
-                dbg_vbeta  <= w_vbeta;
-            end
-        end
-    end
+    // Debug readback uses submodule registered outputs directly (no extra FFs needed)
 
     // ════════════════════════════════════════════════════════════════
     // Wishbone Slave
@@ -349,14 +316,14 @@ module foc_top #(
             8'h40: wb_dat_o = {{(32-PWM_BITS){1'b0}}, reg_duty_a};
             8'h44: wb_dat_o = {{(32-PWM_BITS){1'b0}}, reg_duty_b};
             8'h48: wb_dat_o = {{(32-PWM_BITS){1'b0}}, reg_duty_c};
-            8'h50: wb_dat_o = {{(32-DATA_W){dbg_id[DATA_W-1]}}, dbg_id};
-            8'h54: wb_dat_o = {{(32-DATA_W){dbg_iq[DATA_W-1]}}, dbg_iq};
-            8'h58: wb_dat_o = {{(32-DATA_W){dbg_ialpha[DATA_W-1]}}, dbg_ialpha};
-            8'h5C: wb_dat_o = {{(32-DATA_W){dbg_ibeta[DATA_W-1]}}, dbg_ibeta};
-            8'h60: wb_dat_o = {{(32-DATA_W){dbg_vd[DATA_W-1]}}, dbg_vd};
-            8'h64: wb_dat_o = {{(32-DATA_W){dbg_vq[DATA_W-1]}}, dbg_vq};
-            8'h68: wb_dat_o = {{(32-DATA_W){dbg_valpha[DATA_W-1]}}, dbg_valpha};
-            8'h6C: wb_dat_o = {{(32-DATA_W){dbg_vbeta[DATA_W-1]}}, dbg_vbeta};
+            8'h50: wb_dat_o = {{(32-DATA_W){w_id[DATA_W-1]}}, w_id};
+            8'h54: wb_dat_o = {{(32-DATA_W){w_iq[DATA_W-1]}}, w_iq};
+            8'h58: wb_dat_o = {{(32-DATA_W){w_ialpha[DATA_W-1]}}, w_ialpha};
+            8'h5C: wb_dat_o = {{(32-DATA_W){w_ibeta[DATA_W-1]}}, w_ibeta};
+            8'h60: wb_dat_o = {{(32-DATA_W){w_vd[DATA_W-1]}}, w_vd};
+            8'h64: wb_dat_o = {{(32-DATA_W){w_vq[DATA_W-1]}}, w_vq};
+            8'h68: wb_dat_o = {{(32-DATA_W){w_valpha[DATA_W-1]}}, w_valpha};
+            8'h6C: wb_dat_o = {{(32-DATA_W){w_vbeta[DATA_W-1]}}, w_vbeta};
             8'h70: wb_dat_o = 32'(dbg_pi_d_int);
             8'h74: wb_dat_o = 32'(dbg_pi_q_int);
             8'h80: wb_dat_o = {PWM_BITS[7:0], CORDIC_ITERS[7:0], FRAC_W[7:0], DATA_W[7:0]};
