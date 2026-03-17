@@ -341,55 +341,23 @@ module foc_top #(
         .done   (clarke_done)
     );
 
-    // ── Shared Rotation (Park + Inverse Park) ──
-    // Park and InvPark never run concurrently, so they share one set of 4 multipliers.
-    logic                      rotate_en;
-    logic                      rotate_mode;  // 0=Park, 1=InvPark
-    logic signed [DATA_W-1:0]  rotate_in_a, rotate_in_b;
-    logic signed [DATA_W-1:0]  rotate_out_x, rotate_out_y;
-    logic                      rotate_done;
-
-    assign rotate_en   = park_en | inv_park_en;
-    assign rotate_mode = inv_park_en;
-    assign rotate_in_a = inv_park_en ? w_vd : w_ialpha;
-    assign rotate_in_b = inv_park_en ? w_vq : w_ibeta;
-
-    foc_rotate #(
-        .DATA_W(DATA_W),
-        .FRAC_W(FRAC_W)
-    ) u_rotate (
+    // ── Park ──
+    foc_park #(
+        .DATA_W    (DATA_W),
+        .FRAC_W    (FRAC_W),
+        .SHARED_MUL(SHARED_MUL)
+    ) u_park (
         .clk    (clk),
         .rst_n  (rst_n),
-        .en     (rotate_en),
-        .mode   (rotate_mode),
-        .in_a   (rotate_in_a),
-        .in_b   (rotate_in_b),
+        .en     (park_en),
+        .i_alpha(w_ialpha),
+        .i_beta (w_ibeta),
         .sin_val(w_sin),
         .cos_val(w_cos),
-        .out_x  (rotate_out_x),
-        .out_y  (rotate_out_y),
-        .done   (rotate_done)
+        .i_d    (w_id),
+        .i_q    (w_iq),
+        .done   (park_done)
     );
-
-    // Rotate outputs feed PI directly (stable during PI stages since rotate
-    // isn't re-enabled until InvPark, which runs after both PIs complete).
-    // Hold registers capture Park results for Wishbone debug readback at 0x50/0x54,
-    // since rotate outputs change when InvPark runs later.
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            w_id <= '0;
-            w_iq <= '0;
-        end else if (rotate_done && state == ST_PARK) begin
-            w_id <= rotate_out_x;
-            w_iq <= rotate_out_y;
-        end
-    end
-
-    // InvPark outputs come directly from rotate (last user, outputs stay stable)
-    assign w_valpha      = rotate_out_x;
-    assign w_vbeta       = rotate_out_y;
-    assign park_done     = rotate_done;
-    assign inv_park_done = rotate_done;
 
     // ── PI D-axis ──
     logic pi_d_clear;
@@ -405,7 +373,7 @@ module foc_top #(
         .en      (pi_d_en),
         .clear   (pi_d_clear),
         .ref_val (reg_id_ref),
-        .meas_val(rotate_out_x),
+        .meas_val(w_id),
         .kp      (reg_kp),
         .ki      (reg_ki),
         .out_max (reg_out_max),
@@ -433,7 +401,7 @@ module foc_top #(
         .en      (pi_q_en),
         .clear   (pi_q_clear),
         .ref_val (reg_iq_ref),
-        .meas_val(rotate_out_y),
+        .meas_val(w_iq),
         .kp      (pi_q_kp),
         .ki      (pi_q_ki),
         .out_max (reg_out_max),
@@ -445,6 +413,24 @@ module foc_top #(
     // ── PI integrator debug readback ──
     assign dbg_pi_d_int = u_pi_d.u_i;
     assign dbg_pi_q_int = u_pi_q.u_i;
+
+    // ── Inverse Park ──
+    foc_inv_park #(
+        .DATA_W    (DATA_W),
+        .FRAC_W    (FRAC_W),
+        .SHARED_MUL(SHARED_MUL)
+    ) u_inv_park (
+        .clk    (clk),
+        .rst_n  (rst_n),
+        .en     (inv_park_en),
+        .v_d    (w_vd),
+        .v_q    (w_vq),
+        .sin_val(w_sin),
+        .cos_val(w_cos),
+        .v_alpha(w_valpha),
+        .v_beta (w_vbeta),
+        .done   (inv_park_done)
+    );
 
     // ── SVPWM ──
     foc_svpwm #(
