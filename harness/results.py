@@ -56,6 +56,26 @@ def read_last_n(path: Path, n: int = 20) -> str:
     return header + "\n" + "\n".join(selected)
 
 
+def get_last_experiment_id(path: Path) -> int:
+    """Get the highest experiment_id from results.tsv, or 0 if empty."""
+    if not path.is_file():
+        return 0
+    max_id = 0
+    try:
+        with open(path) as f:
+            reader = csv.DictReader(f, delimiter='\t')
+            for row in reader:
+                try:
+                    eid = int(row.get("experiment_id", 0))
+                    if eid > max_id:
+                        max_id = eid
+                except (ValueError, TypeError):
+                    pass
+    except Exception:
+        pass
+    return max_id
+
+
 def get_latest_metrics(path: Path, mode: str) -> dict | None:
     """Get metrics from the last 'keep' row in results.tsv."""
     if not path.is_file():

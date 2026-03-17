@@ -189,26 +189,29 @@ def invoke_claude(prompt: str, design_dir: Path, model: str | None = None,
         cmd.extend(["--model", model])
 
     log.info("Invoking Claude Code CLI (timeout=%ds)...", timeout)
+
+    # Write prompt to temp file to avoid arg length limits
+    prompt_file = design_dir / ".autosilicon_prompt.txt"
+    prompt_file.write_text(prompt)
+
     try:
+        # stdout/stderr go to terminal (not captured) so SIGINT propagates
+        # Claude's description is extracted from git diff instead
         result = subprocess.run(
-            cmd, cwd=design_dir, capture_output=True, text=True, timeout=timeout,
+            cmd, cwd=design_dir, timeout=timeout,
         )
-        last_line = ""
-        if result.stdout:
-            for line in result.stdout.strip().splitlines():
-                log.info("[claude] %s", line)
-                if line.strip():
-                    last_line = line.strip()
         if result.returncode != 0:
             log.warning("Claude CLI exited with code %d", result.returncode)
-            return False, last_line
-        return True, last_line
+            return False, ""
+        return True, ""
     except subprocess.TimeoutExpired:
         log.warning("Claude CLI timed out after %ds", timeout)
         return False, ""
     except FileNotFoundError:
         log.error("Claude CLI not found — is 'claude' on PATH?")
         return False, ""
+    finally:
+        prompt_file.unlink(missing_ok=True)
 
 
 def invoke_claude_with_retry(prompt: str, design_dir: Path,
@@ -469,7 +472,8 @@ def main() -> None:
     dimensions = pareto.get_dimensions(args.mode)
     frontier = pareto.load_frontier(frontier_path)
 
-    experiment_id = 0
+    # Resume from last experiment ID in results.tsv
+    experiment_id = res_mod.get_last_experiment_id(results_tsv)
 
     while True:
         experiment_id += 1
