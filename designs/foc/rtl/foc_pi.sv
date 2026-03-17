@@ -7,10 +7,11 @@
 // PI_ACC_W must be >= DATA_W + FRAC_W for correct extraction.
 // Default: 2*DATA_W (scales automatically with datapath width).
 //
-// 3-cycle latency:
+// 4-cycle latency:
 //   Cycle 1: error = sat(ref - meas)
 //   Cycle 2: u_p = fixed_mul(kp, e), delta = ki * e (raw product)
-//   Cycle 3: accumulate + clamp integrator + output sum + clamp + anti-windup
+//   Cycle 3: accumulate + clamp integrator
+//   Cycle 4: output sum + clamp + anti-windup decision
 
 module foc_pi #(
     parameter int DATA_W   = 16,
@@ -44,11 +45,15 @@ module foc_pi #(
 
     // ── Pipeline signals ──
     logic signed [DATA_W-1:0]    error_s1;
-    logic                        valid_s1, valid_s2, valid_s3;
+    logic                        valid_s1, valid_s2, valid_s3, valid_s4;
 
     logic signed [DATA_W-1:0]    u_p_s2;
     logic signed [PI_ACC_W-1:0]  delta_s2;
     logic signed [DATA_W-1:0]    error_s2;
+
+    logic signed [PI_ACC_W-1:0]  u_i_clamped_s3;
+    logic signed [DATA_W-1:0]    u_p_s3;
+    logic signed [DATA_W-1:0]    error_s3;
 
     // ── int_max extended to accumulator scale ──
     // int_max is Q(INT_W).(FRAC_W); shift left by FRAC_W to align with accumulator
@@ -126,7 +131,21 @@ module foc_pi #(
             u_i_int_clamped = u_i_tent;
     end
 
-    // ── Stage 3: Output sum, clamp, anti-windup ──
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            u_p_s3   <= '0;
+            error_s3 <= '0;
+            valid_s3 <= 1'b0;
+        end else begin
+            valid_s3 <= valid_s2;
+            if (valid_s2) begin
+                u_p_s3   <= u_p_s2;
+                error_s3 <= error_s2;
+            end
+        end
+    end
+
+    // ── Stage 4: Output sum, clamp, anti-windup ──
     logic signed [PI_ACC_W-1:0] u_i_shifted;
     logic signed [DATA_W-1:0]   u_i_out;
     logic signed [DATA_W:0]     u_raw;
@@ -136,24 +155,24 @@ module foc_pi #(
         // Extract DATA_W-bit value from accumulator by >>> FRAC_W
         u_i_shifted = u_i_int_clamped >>> FRAC_W;
         u_i_out     = u_i_shifted[DATA_W-1:0];
-        u_raw       = {u_p_s2[DATA_W-1], u_p_s2} + {u_i_out[DATA_W-1], u_i_out};
+        u_raw       = {u_p_s3[DATA_W-1], u_p_s3} + {u_i_out[DATA_W-1], u_i_out};
         saturated   = (u_raw > $signed({1'b0, out_max})) ||
                       (u_raw < -$signed({1'b0, out_max}));
-        same_sign   = (error_s2[DATA_W-1] == u_raw[DATA_W]);
+        same_sign   = (error_s3[DATA_W-1] == u_raw[DATA_W]);
     end
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             u_i     <= '0;
             out_val <= '0;
-            valid_s3<= 1'b0;
+            valid_s4<= 1'b0;
         end else if (clear) begin
             u_i     <= '0;
             out_val <= '0;
-            valid_s3<= 1'b0;
+            valid_s4<= 1'b0;
         end else begin
-            valid_s3 <= valid_s2;
-            if (valid_s2) begin
+            valid_s4 <= valid_s3;
+            if (valid_s3) begin
                 // Anti-windup
                 if (saturated && same_sign)
                     u_i <= u_i;
@@ -171,6 +190,6 @@ module foc_pi #(
         end
     end
 
-    assign done = valid_s3;
+    assign done = valid_s4;
 
 endmodule
