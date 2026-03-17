@@ -128,11 +128,9 @@ module foc_pi #(
     end
 
     // ── Stage 4: Output sum, clamp, anti-windup ──
-    // Comparators shared between output clamping and anti-windup saturation detection.
     logic signed [PI_ACC_W-1:0] u_i_shifted;
     logic signed [DATA_W-1:0]   u_i_out;
     logic signed [DATA_W:0]     u_raw;
-    logic signed [DATA_W-1:0]   out_clamped;
     logic                       saturated, same_sign;
 
     always_comb begin
@@ -140,20 +138,9 @@ module foc_pi #(
         u_i_shifted = u_i_int_clamped >>> FRAC_W;
         u_i_out     = u_i_shifted[DATA_W-1:0];
         u_raw       = {u_p_s2[DATA_W-1], u_p_s2} + {u_i_out[DATA_W-1], u_i_out};
-
-        // Single set of comparators for both output clamp and anti-windup
-        if (u_raw > $signed({1'b0, out_max})) begin
-            out_clamped = out_max;
-            saturated   = 1'b1;
-        end else if (u_raw < -$signed({1'b0, out_max})) begin
-            out_clamped = -out_max;
-            saturated   = 1'b1;
-        end else begin
-            out_clamped = u_raw[DATA_W-1:0];
-            saturated   = 1'b0;
-        end
-
-        same_sign = (error_sign_s2 == u_raw[DATA_W]);
+        saturated   = (u_raw > $signed({1'b0, out_max})) ||
+                      (u_raw < -$signed({1'b0, out_max}));
+        same_sign   = (error_sign_s2 == u_raw[DATA_W]);
     end
 
     always_ff @(posedge clk or negedge rst_n) begin
@@ -168,13 +155,19 @@ module foc_pi #(
         end else begin
             valid_s4 <= valid_s3;
             if (valid_s3) begin
-                // Anti-windup: freeze integrator when output saturated and error same sign
+                // Anti-windup
                 if (saturated && same_sign)
                     u_i <= u_i;
                 else
                     u_i <= u_i_int_clamped;
 
-                out_val <= out_clamped;
+                // Output clamp
+                if (u_raw > $signed({1'b0, out_max}))
+                    out_val <= out_max;
+                else if (u_raw < -$signed({1'b0, out_max}))
+                    out_val <= -out_max;
+                else
+                    out_val <= u_raw[DATA_W-1:0];
             end
         end
     end
