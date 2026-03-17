@@ -51,6 +51,53 @@ def extract_fe_metrics(design_dir: Path) -> dict:
     return metrics
 
 
+def extract_fe_sweep_metrics(design_dir: Path) -> list[dict]:
+    """Extract metrics from ALL configs in a sweep.
+
+    Returns a list of dicts, each with area, estimated_fmax_mhz, and the
+    parameter config that produced them.
+    """
+    results_dir = design_dir / "synth" / "results"
+    if not results_dir.is_dir():
+        return []
+
+    points = []
+    # Find all per-config stats files
+    for stats_path in sorted(results_dir.glob("config_*_stats.json")):
+        config_id = stats_path.name.split("_")[1]  # e.g. "0000"
+        m = _parse_yosys_stat_json(stats_path)
+        if not m.get("cell_count"):
+            continue
+
+        # Find matching yosys log for fmax
+        yosys_log = results_dir / f"config_{config_id}_yosys.log"
+        if yosys_log.is_file():
+            fmax = _extract_fmax_from_abc(yosys_log)
+            if fmax is not None:
+                m["estimated_fmax_mhz"] = fmax
+
+        # Read config params from the sweep CSV
+        m["config_id"] = config_id
+        points.append(m)
+
+    # Enrich with parameter values from sweep_results.csv
+    csv_path = results_dir / "sweep_results.csv"
+    if csv_path.is_file():
+        import csv
+        with open(csv_path) as f:
+            for row in csv.DictReader(f):
+                cid = str(int(row.get("config_id", -1))).zfill(4)
+                for p in points:
+                    if p.get("config_id") == cid:
+                        p["config_params"] = {k: row[k] for k in row
+                                               if k not in ("config_id", "status", "synth_time_s",
+                                                            "num_cells", "num_wires", "num_wire_bits",
+                                                            "num_memories", "num_memory_bits", "num_processes")}
+                        break
+
+    return points
+
+
 def _parse_yosys_stat_json(path: Path) -> dict:
     """Parse Yosys stat -json output.
 

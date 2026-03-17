@@ -340,17 +340,29 @@ def run_fe_evaluation(design_dir: Path, timeout: int) -> dict:
     if not make_ok and test_results.functional_passed:
         log.info("make test exited non-zero but only accuracy tests failed — continuing")
 
-    # Step 3: synth
-    log.info("Running: make synth-one")
-    ok, output, elapsed = run_make(design_dir, "synth-one", timeout)
+    # Step 3: sweep synthesis across parameter configs
+    log.info("Running: make sweep-quick")
+    ok, output, elapsed = run_make(design_dir, "sweep-quick", timeout)
     result["synth_time_s"] = elapsed
     if not ok:
-        log.warning("Synthesis FAILED")
+        log.warning("Synthesis sweep FAILED")
         return result
 
-    # Extract metrics
-    metrics = me.extract_fe_metrics(design_dir)
-    result.update(metrics)
+    # Extract metrics from all sweep configs
+    sweep_points = me.extract_fe_sweep_metrics(design_dir)
+    if not sweep_points:
+        log.warning("No sweep metrics extracted")
+        return result
+
+    # Use the best area point as the headline metric for results.tsv
+    best = min(sweep_points, key=lambda p: p.get("area", float("inf")))
+    result.update(best)
+    # Attach all sweep points for Pareto frontier update
+    result["_sweep_points"] = sweep_points
+    log.info("Sweep: %d configs, best area=%.0f, best fmax=%.1f",
+             len(sweep_points),
+             min(p.get("area", 0) for p in sweep_points),
+             max(p.get("estimated_fmax_mhz", 0) for p in sweep_points))
     return result
 
 
@@ -559,24 +571,31 @@ def main() -> None:
         else:
             hard_gate_failed = be_hard_gate(eval_result, current_metrics)
 
-        # ── 7. Pareto check ──────────────────────────────────────
-        # Build the point for Pareto comparison
-        point = {dim["name"]: eval_result.get(dim["name"])
-                 for dim in dimensions}
-
-        # Check if any metrics are missing
-        has_metrics = all(v is not None for v in point.values())
+        # ── 7. Pareto check (all sweep points) ───────────────────
+        sweep_points = eval_result.pop("_sweep_points", [])
+        # Build Pareto points from sweep (or single point if no sweep)
+        pareto_points = []
+        for sp in (sweep_points or [eval_result]):
+            pt = {dim["name"]: sp.get(dim["name"]) for dim in dimensions}
+            if all(v is not None for v in pt.values()):
+                pareto_points.append(pt)
 
         if hard_gate_failed:
             status = "discard_hard_gate"
-        elif not has_metrics:
+        elif not pareto_points:
             status = "discard_no_metrics"
-            log.warning("Missing metrics — discarding: %s", point)
-        elif not pareto.is_pareto_improving(point, frontier, dimensions):
-            status = "discard_not_improving"
-            log.info("Not Pareto-improving — discarding")
+            log.warning("No valid metrics from any config — discarding")
         else:
-            status = "keep"
+            # Check if ANY sweep point is Pareto-improving
+            any_improving = any(
+                pareto.is_pareto_improving(pt, frontier, dimensions)
+                for pt in pareto_points
+            )
+            if not any_improving:
+                status = "discard_not_improving"
+                log.info("No sweep config is Pareto-improving — discarding")
+            else:
+                status = "keep"
 
         # ── 8. Record result ──────────────────────────────────────
         row = {
@@ -591,10 +610,14 @@ def main() -> None:
 
         # ── 9. Keep or discard ────────────────────────────────────
         if status == "keep":
-            frontier = pareto.update_frontier(point, frontier, dimensions)
+            # Add ALL improving sweep points to frontier
+            for pt in pareto_points:
+                if pareto.is_pareto_improving(pt, frontier, dimensions):
+                    frontier = pareto.update_frontier(pt, frontier, dimensions)
             pareto.save_frontier(frontier, frontier_path)
             log.info("✓ KEPT — experiment %d (%s)", experiment_id, description)
-            log.info("  Frontier now has %d point(s)", len(frontier))
+            log.info("  Frontier now has %d point(s) from %d sweep configs",
+                     len(frontier), len(pareto_points))
         else:
             git_revert_head(design_dir)
             log.info("✗ DISCARDED — experiment %d [%s]", experiment_id, status)
