@@ -38,10 +38,8 @@ module foc_svpwm #(
         result = xe + (xe >>> 1) + (xe >>> 3) + (xe >>> 4) + (xe >>> 5)
                + (xe >>> 7) + (xe >>> 8) + (xe >>> 10) + (xe >>> 11);
         // Clamp to DATA_W
-        if (result > $signed({{2{1'b0}}, POS_MAX}))
-            sqrt3_mul = POS_MAX;
-        else if (result < $signed({{2{1'b1}}, NEG_MIN}))
-            sqrt3_mul = NEG_MIN;
+        if (result[DATA_W+1:DATA_W] != {2{result[DATA_W-1]}})
+            sqrt3_mul = result[DATA_W+1] ? NEG_MIN : POS_MAX;
         else
             sqrt3_mul = result[DATA_W-1:0];
     endfunction

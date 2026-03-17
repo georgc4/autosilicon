@@ -66,10 +66,8 @@ module foc_cordic #(
 
     // ── Saturate (DATA_W+1) -> DATA_W ──
     function automatic signed [DATA_W-1:0] saturate(input signed [DATA_W:0] val);
-        if (val > $signed({1'b0, POS_MAX}))
-            saturate = POS_MAX;
-        else if (val < $signed({1'b1, NEG_MIN}))
-            saturate = NEG_MIN;
+        if (val[DATA_W] != val[DATA_W-1])
+            saturate = val[DATA_W] ? NEG_MIN : POS_MAX;
         else
             saturate = val[DATA_W-1:0];
     endfunction

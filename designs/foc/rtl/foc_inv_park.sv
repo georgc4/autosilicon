@@ -33,8 +33,7 @@ module foc_inv_park #(
     );
         logic signed [DATA_W:0] s;
         s = {a[DATA_W-1], a} + {b[DATA_W-1], b};
-        if (s > $signed({1'b0, POS_MAX})) sat_add = POS_MAX;
-        else if (s < $signed({1'b1, NEG_MIN})) sat_add = NEG_MIN;
+        if (s[DATA_W] != s[DATA_W-1]) sat_add = s[DATA_W] ? NEG_MIN : POS_MAX;
         else sat_add = s[DATA_W-1:0];
     endfunction
 

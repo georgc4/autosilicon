@@ -32,10 +32,8 @@ module foc_clarke #(
     );
         logic signed [DATA_W:0] sum;
         sum = {a[DATA_W-1], a} + {b[DATA_W-1], b};
-        if (sum > $signed({1'b0, POS_MAX}))
-            sat_add = POS_MAX;
-        else if (sum < $signed({1'b1, NEG_MIN}))
-            sat_add = NEG_MIN;
+        if (sum[DATA_W] != sum[DATA_W-1])
+            sat_add = sum[DATA_W] ? NEG_MIN : POS_MAX;
         else
             sat_add = sum[DATA_W-1:0];
     endfunction

@@ -58,8 +58,7 @@ module foc_pi #(
 
     // ── Clamp helpers ──
     function automatic signed [DATA_W-1:0] clamp_dw(input signed [DATA_W:0] val);
-        if (val > $signed({1'b0, POS_MAX})) clamp_dw = POS_MAX;
-        else if (val < $signed({1'b1, NEG_MIN})) clamp_dw = NEG_MIN;
+        if (val[DATA_W] != val[DATA_W-1]) clamp_dw = val[DATA_W] ? NEG_MIN : POS_MAX;
         else clamp_dw = val[DATA_W-1:0];
     endfunction
 
