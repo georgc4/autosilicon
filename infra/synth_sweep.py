@@ -186,6 +186,19 @@ def generate_yosys_script(
     json_out = results_dir / f"config_{config_id:04d}_stats.json"
     netlist_out = results_dir / f"config_{config_id:04d}_netlist.v"
 
+    # Resolve liberty file path
+    sky130_cfg = cfg.get("sky130", {})
+    liberty_file = os.environ.get("LIBERTY_FILE", "")
+    if not liberty_file:
+        # Default: check ~/.volare for Sky130 HD typical corner
+        volare_glob = list(Path.home().glob(
+            ".volare/volare/sky130/versions/*/sky130A/libs.ref/sky130_fd_sc_hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib"
+        ))
+        if volare_glob:
+            liberty_file = str(volare_glob[0])
+    if not liberty_file:
+        liberty_file = sky130_cfg.get("liberty_file", "")
+
     # Fill template
     script = template
     script = script.replace("__DESIGN_TOP__", top_module)
@@ -193,6 +206,7 @@ def generate_yosys_script(
     script = script.replace("__PARAM_LIST__", param_block)
     script = script.replace("__JSON_OUT__", str(json_out))
     script = script.replace("__NETLIST_OUT__", str(netlist_out))
+    script = script.replace("__LIBERTY_FILE__", liberty_file)
 
     script_path = results_dir / f"config_{config_id:04d}.ys"
     script_path.write_text(script)
@@ -244,12 +258,16 @@ def run_single_config(args: tuple) -> dict:
         elapsed = time.time() - t0
         row["synth_time_s"] = round(elapsed, 2)
 
+        # Save stdout (contains ABC delay info) and stderr
+        log_path = results_dir / f"config_{config_id:04d}_yosys.log"
+        log_path.write_text(result.stdout or "")
+        if result.stderr:
+            err_path = results_dir / f"config_{config_id:04d}_stderr.log"
+            err_path.write_text(result.stderr)
+
         if result.returncode != 0:
             row["status"] = "FAIL"
             log.warning("Config %04d FAILED (rc=%d)", config_id, result.returncode)
-            # Save stderr for debugging
-            err_path = results_dir / f"config_{config_id:04d}_stderr.log"
-            err_path.write_text(result.stderr)
         else:
             row["status"] = "OK"
             # Parse stats
