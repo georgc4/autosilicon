@@ -51,7 +51,7 @@ module foc_svpwm #(
     logic signed [DATA_W-1:0] sqrt3_vb;
     logic signed [DATA_W:0]   neg_va_ext, sqrt3_vb_ext;
     logic signed [DATA_W:0]   vb_wide, vc_wide;
-    logic signed [DATA_W-1:0] va_s1, vb_s1, vc_s1;
+    logic signed [DATA_W-1:0] vb_s1, vc_s1;
     logic                     valid_s1;
 
     always_comb begin
@@ -64,14 +64,12 @@ module foc_svpwm #(
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            va_s1    <= '0;
             vb_s1    <= '0;
             vc_s1    <= '0;
             valid_s1 <= 1'b0;
         end else begin
             valid_s1 <= en;
             if (en) begin
-                va_s1 <= v_alpha;
                 vb_s1 <= vb_wide[DATA_W-1:0];
                 vc_s1 <= vc_wide[DATA_W-1:0];
             end
@@ -85,16 +83,16 @@ module foc_svpwm #(
 
     always_comb begin
         // 3-input max
-        if (va_s1 >= vb_s1 && va_s1 >= vc_s1)
-            vmax = va_s1;
+        if (v_alpha >= vb_s1 && v_alpha >= vc_s1)
+            vmax = v_alpha;
         else if (vb_s1 >= vc_s1)
             vmax = vb_s1;
         else
             vmax = vc_s1;
 
         // 3-input min
-        if (va_s1 <= vb_s1 && va_s1 <= vc_s1)
-            vmin = va_s1;
+        if (v_alpha <= vb_s1 && v_alpha <= vc_s1)
+            vmin = v_alpha;
         else if (vb_s1 <= vc_s1)
             vmin = vb_s1;
         else
@@ -112,7 +110,7 @@ module foc_svpwm #(
         end else begin
             valid_s2 <= valid_s1;
             if (valid_s1) begin
-                va_s2 <= va_s1 + voffset;
+                va_s2 <= v_alpha + voffset;
                 vb_s2 <= vb_s1 + voffset;
                 vc_s2 <= vc_s1 + voffset;
             end

@@ -42,7 +42,6 @@ module foc_clarke #(
 
     // ── Pipeline registers ──
     logic signed [DATA_W-1:0] sum_stage;  // sat(ia + sat(2*ib))
-    logic signed [DATA_W-1:0] ia_d1;
     logic                     valid_s1, valid_s2;
 
     // Stage 1: compute sat(ia + sat(ib + ib))
@@ -55,13 +54,11 @@ module foc_clarke #(
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             sum_stage <= '0;
-            ia_d1     <= '0;
             valid_s1  <= 1'b0;
         end else begin
             valid_s1 <= en;
             if (en) begin
                 sum_stage <= sat_add(ia, ib_2);
-                ia_d1     <= ia;
             end
         end
     end
@@ -81,7 +78,7 @@ module foc_clarke #(
         end else begin
             valid_s2 <= valid_s1;
             if (valid_s1) begin
-                i_alpha <= ia_d1;
+                i_alpha <= ia;
                 i_beta  <= product[FRAC_W +: DATA_W];
             end
         end
