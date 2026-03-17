@@ -1,5 +1,8 @@
 // FOC Motor Coprocessor — PI Controller with Anti-Windup
 //
+// Dual-channel controller: shares datapath between D and Q axes (selected by
+// `channel` input), maintaining separate integrator state per channel.
+//
 // Accumulator stores raw ki*e products (2*DATA_W-bit, clamped to PI_ACC_W).
 // Output extracted by >>> FRAC_W to get DATA_W-bit Q(INT_W).(FRAC_W).
 // Anti-windup: freeze integrator when output saturated AND error same sign.
@@ -8,7 +11,7 @@
 // Default: 2*DATA_W (scales automatically with datapath width).
 //
 // 4-cycle latency:
-//   Cycle 1: error = sat(ref - meas)
+//   Cycle 1: error = sat(ref - meas), register kp/ki
 //   Cycle 2: u_p = fixed_mul(kp, e), delta = ki * e (raw product)
 //   Cycle 3: accumulate + clamp integrator
 //   Cycle 4: output sum + clamp + anti-windup decision
@@ -22,6 +25,7 @@ module foc_pi #(
     input  logic                      rst_n,
     input  logic                      en,
     input  logic                      clear,
+    input  logic                      channel,
     input  logic signed [DATA_W-1:0]  ref_val,
     input  logic signed [DATA_W-1:0]  meas_val,
     input  logic signed [DATA_W-1:0]  kp,
@@ -38,11 +42,15 @@ module foc_pi #(
     localparam signed [DATA_W-1:0]    NEG_MIN = {1'b1, {(DATA_W-1){1'b0}}};
     localparam int PI_PROD_W = 2 * DATA_W;
 
-    // ── Integrator state (persistent across FOC iterations) ──
-    logic signed [PI_ACC_W-1:0] u_i;
+    // ── Integrator state (persistent across FOC iterations, per channel) ──
+    logic signed [PI_ACC_W-1:0] u_i_ch0, u_i_ch1;
+
+    // ── Channel pipeline ──
+    logic ch_s1, ch_s2, ch_s3;
 
     // ── Pipeline signals ──
     logic signed [DATA_W-1:0]    error_s1;
+    logic signed [DATA_W-1:0]    kp_s1, ki_s1;
     logic                        valid_s1, valid_s2, valid_s3, valid_s4;
 
     logic signed [DATA_W-1:0]    u_p_s2;
@@ -62,17 +70,23 @@ module foc_pi #(
         else clamp_dw = val[DATA_W-1:0];
     endfunction
 
-    // ── Stage 1: Compute error with saturation ──
+    // ── Stage 1: Compute error with saturation, register gains ──
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             error_s1 <= '0;
+            kp_s1    <= '0;
+            ki_s1    <= '0;
             valid_s1 <= 1'b0;
+            ch_s1    <= 1'b0;
         end else begin
             valid_s1 <= en;
+            ch_s1    <= channel;
             if (en) begin
                 error_s1 <= clamp_dw(
                     {ref_val[DATA_W-1], ref_val} - {meas_val[DATA_W-1], meas_val}
                 );
+                kp_s1 <= kp;
+                ki_s1 <= ki;
             end
         end
     end
@@ -81,8 +95,8 @@ module foc_pi #(
     logic signed [PI_PROD_W-1:0] kp_e_full, ki_e_full;
 
     always_comb begin
-        kp_e_full = kp * error_s1;
-        ki_e_full = ki * error_s1;
+        kp_e_full = kp_s1 * error_s1;
+        ki_e_full = ki_s1 * error_s1;
     end
 
     always_ff @(posedge clk or negedge rst_n) begin
@@ -91,8 +105,10 @@ module foc_pi #(
             delta_s2 <= '0;
             error_sign_s2 <= '0;
             valid_s2 <= 1'b0;
+            ch_s2    <= 1'b0;
         end else begin
             valid_s2 <= valid_s1;
+            ch_s2    <= ch_s1;
             if (valid_s1) begin
                 u_p_s2   <= kp_e_full[FRAC_W +: DATA_W];
                 // Sign-extend or truncate raw product to PI_ACC_W
@@ -103,6 +119,10 @@ module foc_pi #(
     end
 
     // ── Stage 3: Accumulate and clamp integrator ──
+    // Select integrator for the channel being processed (aligned with valid_s3)
+    logic signed [PI_ACC_W-1:0] u_i_rd;
+    assign u_i_rd = ch_s3 ? u_i_ch1 : u_i_ch0;
+
     // int_max_ext is always < ACC_MAX (16-bit int_max shifted by 15 = 30 bits max,
     // well within 32-bit accumulator), so clamping directly to int_max_ext subsumes
     // the overflow clamp — no need for a separate ACC_MAX/ACC_MIN check.
@@ -110,7 +130,7 @@ module foc_pi #(
     logic signed [PI_ACC_W-1:0] u_i_int_clamped;
 
     always_comb begin
-        u_i_tent_wide = {u_i[PI_ACC_W-1], u_i} + {delta_s2[PI_ACC_W-1], delta_s2};
+        u_i_tent_wide = {u_i_rd[PI_ACC_W-1], u_i_rd} + {delta_s2[PI_ACC_W-1], delta_s2};
         if (u_i_tent_wide > $signed({1'b0, int_max_ext}))
             u_i_int_clamped = int_max_ext;
         else if (u_i_tent_wide < -$signed({1'b0, int_max_ext}))
@@ -120,10 +140,13 @@ module foc_pi #(
     end
 
     always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n)
+        if (!rst_n) begin
             valid_s3 <= 1'b0;
-        else
+            ch_s3    <= 1'b0;
+        end else begin
             valid_s3 <= valid_s2;
+            ch_s3    <= ch_s2;
+        end
     end
 
     // ── Stage 4: Output sum, clamp, anti-windup ──
@@ -144,21 +167,25 @@ module foc_pi #(
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            u_i     <= '0;
+            u_i_ch0 <= '0;
+            u_i_ch1 <= '0;
             out_val <= '0;
             valid_s4<= 1'b0;
         end else if (clear) begin
-            u_i     <= '0;
+            u_i_ch0 <= '0;
+            u_i_ch1 <= '0;
             out_val <= '0;
             valid_s4<= 1'b0;
         end else begin
             valid_s4 <= valid_s3;
             if (valid_s3) begin
-                // Anti-windup
-                if (saturated && same_sign)
-                    u_i <= u_i;
-                else
-                    u_i <= u_i_int_clamped;
+                // Anti-windup: update correct channel's integrator
+                if (!(saturated && same_sign)) begin
+                    if (ch_s3)
+                        u_i_ch1 <= u_i_int_clamped;
+                    else
+                        u_i_ch0 <= u_i_int_clamped;
+                end
 
                 // Output clamp
                 if (u_raw > $signed({1'b0, out_max}))
