@@ -22,7 +22,7 @@ module foc_cordic #(
 
     import foc_pkg::*;
 
-    localparam int ITER_W = $clog2(CORDIC_ITERS + 1);
+    localparam int ITER_W = $clog2(CORDIC_ITERS);
     localparam signed [DATA_W-1:0] POS_MAX = {1'b0, {(DATA_W-1){1'b1}}};
     localparam signed [DATA_W-1:0] NEG_MIN = {1'b1, {(DATA_W-1){1'b0}}};
 
