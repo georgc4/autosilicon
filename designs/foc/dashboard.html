@@ -219,8 +219,7 @@ paretoCanvas.addEventListener('mousemove', e => {
       '<div class="tt-title">Experiment ' + hit.exp + '</div>' +
       'Area: ' + Math.round(hit.area).toLocaleString() + ' um2\n' +
       'fmax: ' + hit.fmax.toFixed(1) + ' MHz (' + hit.period.toFixed(2) + ' ns)\n' +
-      'Commit: ' + hit.commit + '\n' +
-      hit.desc.substring(0, 120);
+      'Commit: ' + hit.commit;
   } else {
     tooltip.style.display = 'none';
   }
@@ -290,7 +289,7 @@ function updateTable(rows) {
     const area = r.area ? Number(+r.area).toLocaleString(undefined, {maximumFractionDigits: 0}) : '-';
     const fmax = r.estimated_fmax_mhz ? (+r.estimated_fmax_mhz).toFixed(1) : '-';
     const cells = r.cell_count || '-';
-    const desc = (r.description || '').substring(0, 100);
+    const desc = r.description || '';
     const status = r.status === 'keep' ? 'keep' : r.status.replace('discard_', '');
     tr.innerHTML = '<td>' + r.experiment_id + '</td><td>' + status + '</td><td>' + area + '</td><td>' + fmax + '</td><td>' + cells + '</td><td>' + desc + '</td>';
     tbody.appendChild(tr);
