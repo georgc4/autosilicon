@@ -129,9 +129,11 @@ module foc_svpwm #(
     logic                              valid_s3;
 
     always_comb begin
-        scale_a = va_s2 * $signed((PWM_BITS+1)'(PWM_MAX_L));
-        scale_b = vb_s2 * $signed((PWM_BITS+1)'(PWM_MAX_L));
-        scale_c = vc_s2 * $signed((PWM_BITS+1)'(PWM_MAX_L));
+        // PWM_MAX_L = 2^PWM_BITS - 1, so v * PWM_MAX = (v << PWM_BITS) - v
+        // Replaces 3 multipliers with 3 subtractors
+        scale_a = ((DATA_W+PWM_BITS)'(va_s2) <<< PWM_BITS) - (DATA_W+PWM_BITS)'(va_s2);
+        scale_b = ((DATA_W+PWM_BITS)'(vb_s2) <<< PWM_BITS) - (DATA_W+PWM_BITS)'(vb_s2);
+        scale_c = ((DATA_W+PWM_BITS)'(vc_s2) <<< PWM_BITS) - (DATA_W+PWM_BITS)'(vc_s2);
 
         duty_a_raw = $signed((PWM_BITS+2)'(HALF_SCALE_L)) + (PWM_BITS+2)'(scale_a >>> FRAC_W);
         duty_b_raw = $signed((PWM_BITS+2)'(HALF_SCALE_L)) + (PWM_BITS+2)'(scale_b >>> FRAC_W);
