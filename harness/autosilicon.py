@@ -108,7 +108,7 @@ def git(design_dir: Path, *args: str, check: bool = True,
 
 def git_commit_all(design_dir: Path, message: str) -> str | None:
     """Stage changes in rtl/ and model/ only, then commit. Returns commit hash or None."""
-    git(design_dir, "add", "rtl/", "model/")
+    git(design_dir, "add", "rtl/", "model/", "results.tsv", "pareto_frontier.json")
     status = git(design_dir, "status", "--porcelain")
     if not status.stdout.strip():
         log.info("No changes to commit")
