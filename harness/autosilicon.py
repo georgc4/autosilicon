@@ -336,12 +336,7 @@ def run_fe_evaluation(design_dir: Path, timeout: int) -> dict:
             log.warning("Failed tests: %s", test_results.failures)
         return result
 
-    # Step 3: clean stale synth results then sweep all configs
-    synth_results = design_dir / "synth" / "results"
-    if synth_results.is_dir():
-        import shutil
-        shutil.rmtree(synth_results)
-        synth_results.mkdir()
+    # Step 3: sweep synthesis across all parameter configs
     log.info("Running: make sweep-medium (~54 configs)")
     ok, output, elapsed = run_make(design_dir, "sweep-medium", timeout)
     result["synth_time_s"] = elapsed

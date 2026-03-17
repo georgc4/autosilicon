@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>AutoSilicon - FOC Pareto Dashboard</title>
+<style>
+  body { background: #0d1117; color: #c9d1d9; font-family: -apple-system, 'Helvetica Neue', sans-serif; margin: 20px; }
+  h1 { color: #58a6ff; font-size: 16px; letter-spacing: 0.5px; }
+  .stats { display: flex; gap: 20px; margin: 12px 0; flex-wrap: wrap; }
+  .stat { background: #161b22; padding: 10px 16px; border-radius: 6px; border: 1px solid #30363d; min-width: 120px; }
+  .stat .label { color: #8b949e; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .stat .value { color: #58a6ff; font-size: 20px; font-weight: 600; }
+  .stat .delta { font-size: 11px; }
+  .delta.good { color: #3fb950; }
+  .delta.bad { color: #f85149; }
+  .charts { display: flex; gap: 15px; flex-wrap: wrap; margin: 15px 0; }
+  .chart-wrap { position: relative; }
+  canvas { background: #161b22; border-radius: 6px; border: 1px solid #30363d; }
+  #tooltip {
+    display: none; position: absolute; background: #1c2128; border: 1px solid #444c56;
+    border-radius: 6px; padding: 8px 10px; font-size: 10px; color: #c9d1d9;
+    pointer-events: none; z-index: 10; white-space: pre-line; max-width: 280px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  }
+  #tooltip .tt-title { color: #58a6ff; font-weight: 600; font-size: 11px; margin-bottom: 3px; }
+  table { border-collapse: collapse; margin-top: 12px; font-size: 11px; width: 100%; }
+  th { background: #161b22; color: #8b949e; text-align: left; padding: 6px 8px; border-bottom: 1px solid #30363d; }
+  td { padding: 5px 8px; border-bottom: 1px solid #21262d; }
+  tr.keep td:nth-child(2) { color: #3fb950; }
+  tr.discard td:nth-child(2) { color: #8b949e; }
+  #status { color: #8b949e; font-size: 11px; margin-top: 8px; }
+</style>
+</head>
+<body>
+<h1>AutoSilicon - FOC Pareto Dashboard</h1>
+<div class="stats">
+  <div class="stat"><div class="label">Experiments</div><div class="value" id="n-exp">-</div></div>
+  <div class="stat"><div class="label">Kept</div><div class="value" id="n-kept">-</div></div>
+  <div class="stat"><div class="label">Best Area (um2)</div><div class="value" id="best-area">-</div><div class="delta" id="area-delta"></div></div>
+  <div class="stat"><div class="label">Best fmax (MHz)</div><div class="value" id="best-fmax">-</div><div class="delta" id="fmax-delta"></div></div>
+  <div class="stat"><div class="label">Frontier</div><div class="value" id="n-frontier">-</div></div>
+</div>
+
+<div class="charts">
+  <div class="chart-wrap">
+    <canvas id="pareto" width="700" height="420"></canvas>
+    <div id="tooltip"></div>
+  </div>
+  <canvas id="timeline" width="500" height="420"></canvas>
+</div>
+
+<table id="results-table">
+  <thead><tr><th>#</th><th>Status</th><th>Area</th><th>fmax</th><th>Cells</th><th>Description</th></tr></thead>
+  <tbody></tbody>
+</table>
+<div id="status">Loading...</div>
+
+<script>
+const POLL_MS = 10000;
+const baseline = { area: 215164, fmax: 171.2 };
+const dpr = window.devicePixelRatio || 1;
+const fmaxToP = f => 1000.0 / f;
+
+// Store drawn point positions for hit-testing
+let drawnPoints = [];
+
+const _hiDpiDone = new Set();
+function hiDpiCanvas(canvas) {
+  const ctx = canvas.getContext('2d');
+  if (!_hiDpiDone.has(canvas)) {
+    const w = canvas.width, h = canvas.height;
+    canvas.style.width = w + 'px';
+    canvas.style.height = h + 'px';
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+    ctx.scale(dpr, dpr);
+    _hiDpiDone.add(canvas);
+  }
+  const w = canvas.width / dpr, h = canvas.height / dpr;
+  ctx.clearRect(0, 0, w, h);
+  return ctx;
+}
+
+async function fetchTSV(url) {
+  const r = await fetch(url + '?t=' + Date.now());
+  const text = await r.text();
+  const lines = text.trim().split('\n');
+  if (lines.length < 2) return [];
+  const hdr = lines[0].split('\t');
+  return lines.slice(1).map(line => {
+    const vals = line.split('\t');
+    const obj = {};
+    hdr.forEach((h, i) => obj[h] = vals[i]);
+    return obj;
+  });
+}
+
+async function fetchJSON(url) {
+  const r = await fetch(url + '?t=' + Date.now());
+  return r.json();
+}
+
+function drawPareto(canvas, rows, frontier) {
+  const ctx = hiDpiCanvas(canvas);
+  const W = canvas.width / dpr, H = canvas.height / dpr;
+  const pad = { t: 25, r: 25, b: 45, l: 65 };
+  drawnPoints = [];
+
+  const kept = rows.filter(r => r.status === 'keep' && r.area);
+  if (!kept.length) return;
+
+  const areas = kept.map(r => +r.area);
+  const periods = kept.map(r => fmaxToP(+r.estimated_fmax_mhz));
+  const baseP = fmaxToP(baseline.fmax);
+  const allA = [...areas, baseline.area];
+  const allP = [...periods, baseP];
+  const minA = Math.min(...allA) * 0.99, maxA = Math.max(...allA) * 1.01;
+  const minP = Math.min(...allP) * 0.99, maxP = Math.max(...allP) * 1.01;
+
+  const xS = a => pad.l + (a - minA) / (maxA - minA) * (W - pad.l - pad.r);
+  const yS = p => H - pad.b - (p - minP) / (maxP - minP) * (H - pad.t - pad.b);
+
+  // Grid
+  ctx.strokeStyle = '#21262d'; ctx.lineWidth = 0.5;
+  for (let i = 0; i <= 5; i++) {
+    const x = pad.l + i * (W - pad.l - pad.r) / 5;
+    ctx.beginPath(); ctx.moveTo(x, pad.t); ctx.lineTo(x, H - pad.b); ctx.stroke();
+    ctx.fillStyle = '#484f58'; ctx.font = '9px -apple-system, sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(Math.round(minA + i * (maxA - minA) / 5).toLocaleString(), x, H - pad.b + 14);
+    const y = pad.t + i * (H - pad.t - pad.b) / 5;
+    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W - pad.r, y); ctx.stroke();
+    ctx.textAlign = 'right';
+    ctx.fillText((maxP - i * (maxP - minP) / 5).toFixed(2), pad.l - 6, y + 3);
+  }
+
+  // Axis labels
+  ctx.fillStyle = '#8b949e'; ctx.font = '10px -apple-system, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('Area (um2)', W / 2, H - 5);
+  ctx.save(); ctx.translate(12, H / 2); ctx.rotate(-Math.PI / 2);
+  ctx.fillText('Period (ns)', 0, 0); ctx.restore();
+
+  ctx.fillStyle = '#3fb950'; ctx.font = '9px -apple-system, sans-serif'; ctx.textAlign = 'left';
+  ctx.fillText('better', pad.l + 2, H - pad.b - 4);
+
+  // Cloud: non-frontier kept points (muted)
+  kept.forEach(r => {
+    const a = +r.area, p = fmaxToP(+r.estimated_fmax_mhz);
+    const onFrontier = frontier.some(f => Math.abs(f.area - a) < 1 && Math.abs(f.estimated_fmax_mhz - r.estimated_fmax_mhz) < 0.01);
+    if (onFrontier) return;
+    const x = xS(a), y = yS(p);
+    ctx.fillStyle = 'rgba(63,185,80,0.2)';
+    ctx.beginPath(); ctx.arc(x, y, 2, 0, Math.PI * 2); ctx.fill();
+  });
+
+  // Baseline
+  const bx = xS(baseline.area), by = yS(baseP);
+  ctx.fillStyle = '#f0883e';
+  ctx.beginPath(); ctx.arc(bx, by, 4, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#f0883e'; ctx.font = '9px -apple-system, sans-serif'; ctx.textAlign = 'left';
+  ctx.fillText('baseline', bx + 7, by + 3);
+
+  // Frontier line
+  const fSorted = [...frontier].sort((a, b) => a.area - b.area);
+  if (fSorted.length > 1) {
+    ctx.strokeStyle = 'rgba(88,166,255,0.6)'; ctx.lineWidth = 1.5; ctx.setLineDash([4, 3]);
+    ctx.beginPath();
+    ctx.moveTo(xS(fSorted[0].area), yS(fmaxToP(fSorted[0].estimated_fmax_mhz)));
+    fSorted.forEach(p => ctx.lineTo(xS(p.area), yS(fmaxToP(p.estimated_fmax_mhz))));
+    ctx.stroke(); ctx.setLineDash([]);
+  }
+
+  // Frontier points (prominent, with ring)
+  fSorted.forEach(fp => {
+    const x = xS(fp.area), y = yS(fmaxToP(fp.estimated_fmax_mhz));
+    // Outer ring
+    ctx.strokeStyle = '#58a6ff'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI * 2); ctx.stroke();
+    // Inner fill
+    ctx.fillStyle = '#58a6ff';
+    ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fill();
+
+    // Find matching experiment for tooltip data
+    const match = kept.find(r => Math.abs(+r.area - fp.area) < 1);
+    drawnPoints.push({
+      x, y, radius: 8, frontier: true,
+      area: fp.area,
+      fmax: fp.estimated_fmax_mhz,
+      period: fmaxToP(fp.estimated_fmax_mhz),
+      exp: match ? match.experiment_id : '?',
+      commit: match ? (match.commit || '').substring(0, 7) : '',
+      desc: match ? (match.description || '') : '',
+      config: match ? (match.config_params || '') : '',
+    });
+  });
+}
+
+// Tooltip on hover
+const paretoCanvas = document.getElementById('pareto');
+const tooltip = document.getElementById('tooltip');
+
+paretoCanvas.addEventListener('mousemove', e => {
+  const rect = paretoCanvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+
+  let hit = null;
+  for (const pt of drawnPoints) {
+    if (!pt.frontier) continue;
+    const dx = mx - pt.x, dy = my - pt.y;
+    if (dx * dx + dy * dy < pt.radius * pt.radius) { hit = pt; break; }
+  }
+
+  if (hit) {
+    tooltip.style.display = 'block';
+    tooltip.style.left = (hit.x + 12) + 'px';
+    tooltip.style.top = (hit.y - 10) + 'px';
+    tooltip.innerHTML =
+      '<div class="tt-title">Experiment ' + hit.exp + '</div>' +
+      'Area: ' + Math.round(hit.area).toLocaleString() + ' um2\n' +
+      'fmax: ' + hit.fmax.toFixed(1) + ' MHz (' + hit.period.toFixed(2) + ' ns)\n' +
+      'Commit: ' + hit.commit + '\n' +
+      hit.desc.substring(0, 120);
+  } else {
+    tooltip.style.display = 'none';
+  }
+});
+
+paretoCanvas.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
+
+function drawTimeline(canvas, rows) {
+  const ctx = hiDpiCanvas(canvas);
+  const W = canvas.width / dpr, H = canvas.height / dpr;
+  const pad = { t: 25, r: 25, b: 45, l: 65 };
+
+  const kept = rows.filter(r => r.status === 'keep' && r.area);
+  if (!kept.length) return;
+
+  const areas = [baseline.area, ...kept.map(r => +r.area)];
+  const labels = ['base', ...kept.map(r => r.experiment_id)];
+  const minA = Math.min(...areas) * 0.997, maxA = Math.max(...areas) * 1.003;
+
+  const xS = i => pad.l + (areas.length > 1 ? i / (areas.length - 1) : 0.5) * (W - pad.l - pad.r);
+  const yS = a => H - pad.b - (a - minA) / (maxA - minA) * (H - pad.t - pad.b);
+
+  // Grid
+  ctx.strokeStyle = '#21262d'; ctx.lineWidth = 0.5;
+  for (let i = 0; i <= 4; i++) {
+    const y = pad.t + i * (H - pad.t - pad.b) / 4;
+    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W - pad.r, y); ctx.stroke();
+    ctx.fillStyle = '#484f58'; ctx.font = '9px -apple-system, sans-serif'; ctx.textAlign = 'right';
+    ctx.fillText(Math.round(maxA - i * (maxA - minA) / 4).toLocaleString(), pad.l - 6, y + 3);
+  }
+
+  ctx.fillStyle = '#8b949e'; ctx.font = '10px -apple-system, sans-serif'; ctx.textAlign = 'center';
+  ctx.fillText('Area (um2) over kept experiments', W / 2, H - 5);
+
+  // Line
+  ctx.strokeStyle = '#3fb950'; ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  areas.forEach((a, i) => { i === 0 ? ctx.moveTo(xS(i), yS(a)) : ctx.lineTo(xS(i), yS(a)); });
+  ctx.stroke();
+
+  // Fill under
+  ctx.fillStyle = 'rgba(63,185,80,0.08)';
+  ctx.beginPath();
+  ctx.moveTo(xS(0), yS(areas[0]));
+  areas.forEach((a, i) => ctx.lineTo(xS(i), yS(a)));
+  ctx.lineTo(xS(areas.length - 1), H - pad.b);
+  ctx.lineTo(xS(0), H - pad.b);
+  ctx.closePath(); ctx.fill();
+
+  // Points + labels
+  areas.forEach((a, i) => {
+    ctx.fillStyle = i === 0 ? '#f0883e' : '#3fb950';
+    ctx.beginPath(); ctx.arc(xS(i), yS(a), 2.5, 0, Math.PI * 2); ctx.fill();
+    if (areas.length < 30 || i === 0 || i === areas.length - 1) {
+      ctx.fillStyle = '#484f58'; ctx.font = '8px -apple-system, sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText(labels[i], xS(i), H - pad.b + 14);
+    }
+  });
+}
+
+function updateTable(rows) {
+  const tbody = document.querySelector('#results-table tbody');
+  tbody.innerHTML = '';
+  [...rows].reverse().forEach(r => {
+    const tr = document.createElement('tr');
+    tr.className = r.status === 'keep' ? 'keep' : 'discard';
+    const area = r.area ? Number(+r.area).toLocaleString(undefined, {maximumFractionDigits: 0}) : '-';
+    const fmax = r.estimated_fmax_mhz ? (+r.estimated_fmax_mhz).toFixed(1) : '-';
+    const cells = r.cell_count || '-';
+    const desc = (r.description || '').substring(0, 100);
+    const status = r.status === 'keep' ? 'keep' : r.status.replace('discard_', '');
+    tr.innerHTML = '<td>' + r.experiment_id + '</td><td>' + status + '</td><td>' + area + '</td><td>' + fmax + '</td><td>' + cells + '</td><td>' + desc + '</td>';
+    tbody.appendChild(tr);
+  });
+}
+
+function updateStats(rows, frontier) {
+  const kept = rows.filter(r => r.status === 'keep');
+  document.getElementById('n-exp').textContent = rows.length;
+  document.getElementById('n-kept').textContent = kept.length;
+  document.getElementById('n-frontier').textContent = frontier.length;
+
+  if (frontier.length) {
+    const bestArea = Math.min(...frontier.map(f => f.area));
+    const bestFmax = Math.max(...frontier.map(f => f.estimated_fmax_mhz));
+    document.getElementById('best-area').textContent = Math.round(bestArea).toLocaleString();
+    document.getElementById('best-fmax').textContent = bestFmax.toFixed(1);
+
+    const ad = ((bestArea - baseline.area) / baseline.area * 100).toFixed(1);
+    const el = document.getElementById('area-delta');
+    el.textContent = ad + '% vs baseline';
+    el.className = 'delta ' + (+ad < 0 ? 'good' : 'bad');
+
+    const fd = ((bestFmax - baseline.fmax) / baseline.fmax * 100).toFixed(1);
+    const el2 = document.getElementById('fmax-delta');
+    el2.textContent = (+fd >= 0 ? '+' : '') + fd + '% vs baseline';
+    el2.className = 'delta ' + (+fd > 0 ? 'good' : 'bad');
+  }
+}
+
+async function poll() {
+  try {
+    const [rows, frontier] = await Promise.all([fetchTSV('results.tsv'), fetchJSON('pareto_frontier.json')]);
+    updateStats(rows, frontier);
+    drawPareto(document.getElementById('pareto'), rows, frontier);
+    drawTimeline(document.getElementById('timeline'), rows);
+    updateTable(rows);
+    document.getElementById('status').textContent = 'Updated ' + new Date().toLocaleTimeString() + ' | polling every 10s';
+  } catch (e) {
+    document.getElementById('status').textContent = 'Error: ' + e.message;
+  }
+}
+
+poll();
+setInterval(poll, POLL_MS);
+</script>
+</body>
+</html>
