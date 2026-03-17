@@ -35,8 +35,7 @@ module foc_cordic #(
     typedef enum logic [1:0] {
         S_IDLE    = 2'd0,
         S_ITERATE = 2'd1,
-        S_POST    = 2'd2,
-        S_DONE    = 2'd3
+        S_POST    = 2'd2
     } cordic_st_t;
 
     cordic_st_t cstate;
@@ -143,11 +142,7 @@ module foc_cordic #(
                     cos_val <= cos_corrected;
                     sin_val <= sin_corrected;
                     done    <= 1'b1;
-                    cstate  <= S_DONE;
-                end
-
-                S_DONE: begin
-                    cstate <= S_IDLE;
+                    cstate  <= S_IDLE;
                 end
 
                 default: cstate <= S_IDLE;
