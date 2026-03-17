@@ -634,5 +634,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     import signal
-    signal.signal(signal.SIGINT, lambda *_: (log.info("\nInterrupted."), os._exit(130)))
+    def _die(*_): log.info("\nInterrupted."); os._exit(130)
+    signal.signal(signal.SIGINT, _die)
+    signal.signal(signal.SIGQUIT, _die)
     main()
