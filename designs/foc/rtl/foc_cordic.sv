@@ -15,8 +15,8 @@ module foc_cordic #(
     input  logic                    rst_n,
     input  logic                    start,
     input  logic [ANGLE_W-1:0]     theta,
-    output logic signed [DATA_W-1:0] cos_val,  // combinational from post-correction
-    output logic signed [DATA_W-1:0] sin_val,  // combinational from post-correction
+    output logic signed [DATA_W-1:0] cos_val,
+    output logic signed [DATA_W-1:0] sin_val,
     output logic                    done
 );
 
@@ -86,11 +86,16 @@ module foc_cordic #(
     end
 
     // ── Post-correction: negate based on quadrant ──
-    // cos_val/sin_val are combinational — x_reg, y_reg, quad_reg are stable
-    // from CORDIC completion until the next start, so downstream modules
-    // (Park, Inv Park) read valid values without needing output registers.
-    assign cos_val = (quad_reg[1] ^ quad_reg[0]) ? -x_reg : x_reg;
-    assign sin_val = quad_reg[1] ? -y_reg : y_reg;
+    logic negate_cos, negate_sin;
+    logic signed [DATA_W-1:0] cos_corrected, sin_corrected;
+
+    assign negate_cos = quad_reg[1] ^ quad_reg[0];
+    assign negate_sin = quad_reg[1];
+
+    always_comb begin
+        cos_corrected = negate_cos ? -x_reg : x_reg;
+        sin_corrected = negate_sin ? -y_reg : y_reg;
+    end
 
     // ── Main FSM ──
     always_ff @(posedge clk or negedge rst_n) begin
@@ -101,6 +106,8 @@ module foc_cordic #(
             z_reg    <= '0;
             quad_reg <= '0;
             iter     <= '0;
+            cos_val  <= '0;
+            sin_val  <= '0;
             done     <= 1'b0;
         end else begin
             done <= 1'b0;
@@ -133,6 +140,8 @@ module foc_cordic #(
                 end
 
                 S_POST: begin
+                    cos_val <= cos_corrected;
+                    sin_val <= sin_corrected;
                     done    <= 1'b1;
                     cstate  <= S_DONE;
                 end
