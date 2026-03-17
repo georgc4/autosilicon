@@ -72,17 +72,18 @@ module foc_clarke #(
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            i_alpha  <= '0;
             i_beta   <= '0;
             valid_s2 <= 1'b0;
         end else begin
             valid_s2 <= valid_s1;
             if (valid_s1) begin
-                i_alpha <= ia;
                 i_beta  <= product[FRAC_W +: DATA_W];
             end
         end
     end
+
+    // i_alpha = ia (Clarke identity); ia comes from reg_ia which is stable, no register needed
+    assign i_alpha = ia;
 
     assign done = valid_s2;
 
