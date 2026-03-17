@@ -111,5 +111,5 @@ sky130:
 # Synthesis options
 synthesis:
   yosys_binary: "yosys"
-  parallel_jobs: 4
+  parallel_jobs: 10
   timeout_seconds: 120

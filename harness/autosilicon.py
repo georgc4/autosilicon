@@ -322,27 +322,28 @@ def run_fe_evaluation(design_dir: Path, timeout: int) -> dict:
         log.warning("Lint FAILED")
         return result
 
-    # Step 2: test
+    # Step 2: test (all tests must pass — functional AND accuracy)
     log.info("Running: make test")
     make_ok, output, elapsed = run_make(design_dir, "test", timeout)
 
-    # Parse results.xml to distinguish functional vs accuracy failures.
-    # The make exit code may be non-zero because accuracy-only tests
-    # (like test_accuracy_sweep) failed — that's fine, not a hard gate.
     test_results = me.parse_test_results(design_dir)
-    result["tests_passed"] = test_results.functional_passed
+    result["tests_passed"] = make_ok
     result["max_ulp_error"] = test_results.max_ulp_error
 
-    if not test_results.functional_passed:
-        log.warning("Functional tests FAILED: %s", test_results.failures)
+    if not make_ok:
+        log.warning("Tests FAILED (rc!=0) — discarding")
+        if test_results.failures:
+            log.warning("Failed tests: %s", test_results.failures)
         return result
 
-    if not make_ok and test_results.functional_passed:
-        log.info("make test exited non-zero but only accuracy tests failed — continuing")
-
-    # Step 3: sweep synthesis across parameter configs
-    log.info("Running: make sweep-quick")
-    ok, output, elapsed = run_make(design_dir, "sweep-quick", timeout)
+    # Step 3: clean stale synth results then sweep all configs
+    synth_results = design_dir / "synth" / "results"
+    if synth_results.is_dir():
+        import shutil
+        shutil.rmtree(synth_results)
+        synth_results.mkdir()
+    log.info("Running: make sweep-medium (~54 configs)")
+    ok, output, elapsed = run_make(design_dir, "sweep-medium", timeout)
     result["synth_time_s"] = elapsed
     if not ok:
         log.warning("Synthesis sweep FAILED")
