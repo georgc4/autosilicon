@@ -475,6 +475,13 @@ def main() -> None:
             log.info("Reached max experiments (%d), stopping.", args.max_experiments)
             break
 
+        # Check for stop file (touch designs/foc/.stop to halt)
+        stop_file = design_dir / ".stop"
+        if stop_file.exists():
+            stop_file.unlink()
+            log.info("Stop file detected — exiting gracefully.")
+            break
+
         timestamp = datetime.datetime.now().isoformat(timespec="seconds")
         log.info("━" * 60)
         log.info("Experiment %d — %s", experiment_id, timestamp)
