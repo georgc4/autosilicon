@@ -107,8 +107,8 @@ def git(design_dir: Path, *args: str, check: bool = True,
 
 
 def git_commit_all(design_dir: Path, message: str) -> str | None:
-    """Stage changes in rtl/ and model/ only, then commit. Returns commit hash or None."""
-    git(design_dir, "add", "rtl/", "model/", "results.tsv", "pareto_frontier.json")
+    """Stage RTL/model changes only, then commit. Returns commit hash or None."""
+    git(design_dir, "add", "rtl/", "model/")
     status = git(design_dir, "status", "--porcelain")
     if not status.stdout.strip():
         log.info("No changes to commit")
@@ -119,14 +119,23 @@ def git_commit_all(design_dir: Path, message: str) -> str | None:
 
 
 def git_revert_head(design_dir: Path) -> None:
-    """Revert the last commit (non-interactive)."""
+    """Revert ONLY rtl/ and model/ from the last commit, preserving results/frontier."""
     try:
-        git(design_dir, "revert", "HEAD", "--no-edit")
-        log.info("Reverted HEAD")
+        # Restore rtl/ and model/ to the state before the last commit
+        git(design_dir, "checkout", "HEAD~1", "--", "rtl/", "model/")
+        git(design_dir, "commit", "-m", f"Revert \"{_get_head_subject(design_dir)}\"")
+        log.info("Reverted RTL/model from HEAD")
     except subprocess.CalledProcessError:
-        # If revert fails (e.g., merge conflict), force reset
-        log.warning("git revert failed, falling back to reset")
-        git(design_dir, "reset", "--hard", "HEAD~1")
+        log.warning("Selective revert failed, falling back to full revert")
+        try:
+            git(design_dir, "revert", "HEAD", "--no-edit")
+        except subprocess.CalledProcessError:
+            git(design_dir, "reset", "--hard", "HEAD~1")
+
+
+def _get_head_subject(design_dir: Path) -> str:
+    result = git(design_dir, "log", "-1", "--format=%s", check=False)
+    return result.stdout.strip() if result.returncode == 0 else "unknown"
 
 
 def git_diff_summary(design_dir: Path) -> str:

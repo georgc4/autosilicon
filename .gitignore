@@ -9,3 +9,5 @@ designs/*/synth/results/
 designs/*/autosilicon.log
 designs/*/.autosilicon_*
 *.log
+results.tsv
+pareto_frontier.json
