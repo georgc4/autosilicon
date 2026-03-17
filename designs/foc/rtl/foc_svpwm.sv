@@ -79,10 +79,8 @@ module foc_svpwm #(
     end
 
     // ── Stage 2: Min/Max and offset ──
-    // Store only the offset (1 register) instead of 3 adjusted values.
-    // Stage 1 registers remain stable since SVPWM gets a single en pulse per FOC cycle.
     logic signed [DATA_W-1:0] vmax, vmin, voffset;
-    logic signed [DATA_W-1:0] voffset_s2;
+    logic signed [DATA_W-1:0] va_s2, vb_s2, vc_s2;
     logic                     valid_s2;
 
     always_comb begin
@@ -107,32 +105,30 @@ module foc_svpwm #(
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            voffset_s2 <= '0;
-            valid_s2   <= 1'b0;
+            va_s2    <= '0;
+            vb_s2    <= '0;
+            vc_s2    <= '0;
+            valid_s2 <= 1'b0;
         end else begin
             valid_s2 <= valid_s1;
             if (valid_s1) begin
-                voffset_s2 <= voffset;
+                va_s2 <= va_s1 + voffset;
+                vb_s2 <= vb_s1 + voffset;
+                vc_s2 <= vc_s1 + voffset;
             end
         end
     end
 
     // ── Stage 3: Scale to PWM range ──
     // duty = half + (vx_adj * pwm_max) >> FRAC_W
-    // Add offset to stable s1 values combinationally before scaling
-    logic signed [DATA_W-1:0]         va_adj, vb_adj, vc_adj;
     logic signed [DATA_W+PWM_BITS-1:0] scale_a, scale_b, scale_c;
     logic signed [PWM_BITS+1:0]        duty_a_raw, duty_b_raw, duty_c_raw;
     logic                              valid_s3;
 
     always_comb begin
-        va_adj = va_s1 + voffset_s2;
-        vb_adj = vb_s1 + voffset_s2;
-        vc_adj = vc_s1 + voffset_s2;
-
-        scale_a = va_adj * $signed((PWM_BITS+1)'(PWM_MAX_L));
-        scale_b = vb_adj * $signed((PWM_BITS+1)'(PWM_MAX_L));
-        scale_c = vc_adj * $signed((PWM_BITS+1)'(PWM_MAX_L));
+        scale_a = va_s2 * $signed((PWM_BITS+1)'(PWM_MAX_L));
+        scale_b = vb_s2 * $signed((PWM_BITS+1)'(PWM_MAX_L));
+        scale_c = vc_s2 * $signed((PWM_BITS+1)'(PWM_MAX_L));
 
         duty_a_raw = $signed((PWM_BITS+2)'(HALF_SCALE_L)) + (PWM_BITS+2)'(scale_a >>> FRAC_W);
         duty_b_raw = $signed((PWM_BITS+2)'(HALF_SCALE_L)) + (PWM_BITS+2)'(scale_b >>> FRAC_W);
