@@ -61,14 +61,11 @@ module foc_clarke #(
         end
     end
 
-    // Stage 2: multiply sum by INV_SQRT3 via shift-add (eliminates 16×16 multiplier)
-    // INV_SQRT3 = 18919 = 2^14 + 2^11 + 2^9 - 2^5 + 2^3 - 2^0
+    // Stage 2: multiply sum by INV_SQRT3, truncate
     logic signed [2*DATA_W-1:0] product;
 
     always_comb begin
-        automatic logic signed [2*DATA_W-1:0] se;
-        se = (2*DATA_W)'($signed(sum_stage));
-        product = (se <<< 14) + (se <<< 11) + (se <<< 9) - (se <<< 5) + (se <<< 3) - se;
+        product = sum_stage * $signed(INV_SQRT3);
     end
 
     always_ff @(posedge clk or negedge rst_n) begin
