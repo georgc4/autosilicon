@@ -32,8 +32,8 @@ def extract_fe_metrics(design_dir: Path) -> dict:
         "area": None,
     }
 
-    # Find stat.json — could be in synth/results/ or a per-run dir
-    stat_json = _find_file(design_dir, "stat.json")
+    # Find stats JSON — could be stat.json or config_NNNN_stats.json
+    stat_json = _find_file(design_dir, "*stats.json")
     if stat_json:
         metrics.update(_parse_yosys_stat_json(stat_json))
     else:
@@ -341,14 +341,8 @@ def _parse_drc(reports_dir: Path) -> int:
 
 
 def _find_file(base: Path, name: str) -> Path | None:
-    """Find a file by name under base directory, searching common locations."""
-    # Direct child
-    candidate = base / name
-    if candidate.is_file():
-        return candidate
-
-    # Search in synth/results subdirectories
-    for p in base.rglob(name):
+    """Find a file by name/glob pattern under base directory."""
+    for p in sorted(base.rglob(name)):
         if p.is_file():
             return p
     return None
