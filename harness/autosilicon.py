@@ -175,57 +175,58 @@ def check_scope(design_dir: Path, mode: str) -> bool:
 def invoke_claude(prompt: str, design_dir: Path, model: str | None = None,
                   timeout: int = 600) -> tuple[bool, str]:
     """Invoke Claude Code CLI. Returns (success, last_line_of_output)."""
-    import select
+    import os
+    import signal
+    import threading
 
     cmd = ["claude", "-p", prompt, "--allowedTools", CLAUDE_ALLOWED_TOOLS]
     if model:
         cmd.extend(["--model", model])
 
     log.info("Invoking Claude Code CLI (timeout=%ds)...", timeout)
-    proc = None
     last_line = ""
+
     try:
+        # Start in new process group so we can kill the whole tree
         proc = subprocess.Popen(
             cmd, cwd=design_dir, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            text=True,
+            text=True, preexec_fn=os.setsid,
         )
-        while True:
-            ready, _, _ = select.select([proc.stdout], [], [], 1.0)
-            if ready:
-                line = proc.stdout.readline()
-                if not line:
-                    break
-                stripped = line.rstrip("\n")
-                if stripped:
-                    last_line = stripped
-                log.info("[claude] %s", stripped)
-            elif proc.poll() is not None:
-                for line in proc.stdout:
-                    stripped = line.rstrip("\n")
-                    if stripped:
-                        last_line = stripped
-                    log.info("[claude] %s", stripped)
-                break
+    except FileNotFoundError:
+        log.error("Claude CLI not found — is 'claude' on PATH?")
+        return False, ""
 
-        proc.wait(timeout=timeout)
+    # Read stdout in a background thread so main thread stays interruptible
+    lines = []
+
+    def reader():
+        for line in proc.stdout:
+            stripped = line.rstrip("\n")
+            lines.append(stripped)
+            log.info("[claude] %s", stripped)
+
+    t = threading.Thread(target=reader, daemon=True)
+    t.start()
+
+    try:
+        t.join(timeout=timeout)
+        if t.is_alive():
+            log.warning("Claude CLI timed out after %ds", timeout)
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            return False, lines[-1] if lines else ""
+        proc.wait()
+        last_line = lines[-1] if lines else ""
         if proc.returncode != 0:
             log.warning("Claude CLI exited with code %d", proc.returncode)
             return False, last_line
         return True, last_line
-    except subprocess.TimeoutExpired:
-        if proc:
-            proc.kill()
-        log.warning("Claude CLI timed out after %ds", timeout)
-        return False, last_line
     except KeyboardInterrupt:
-        log.info("Interrupted — killing Claude subprocess...")
-        if proc:
-            proc.kill()
-            proc.wait()
+        log.info("Interrupted — killing Claude process group...")
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        except ProcessLookupError:
+            pass
         raise
-    except FileNotFoundError:
-        log.error("Claude CLI not found — is 'claude' on PATH?")
-        return False, ""
 
 
 def invoke_claude_with_retry(prompt: str, design_dir: Path,
