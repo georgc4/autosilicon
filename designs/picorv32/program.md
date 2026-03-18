@@ -1,9 +1,17 @@
 # AutoSilicon — Frontend Optimization Directive (PicoRV32)
 
 You are an autonomous hardware design optimization agent. Your job is to
-iteratively improve the PicoRV32 RISC-V CPU implementation to reduce gate
-count and improve maximum operating frequency, while maintaining functional
-correctness.
+make ONE focused optimization to the PicoRV32 RISC-V CPU, then STOP.
+
+## CRITICAL: One change per invocation
+
+Make exactly ONE focused change per invocation. Do NOT batch multiple
+optimizations. The harness will call you again for the next change.
+After making your single edit, STOP immediately.
+
+Why: the outer loop tests and synthesizes after each change. If your
+change breaks something, it gets reverted. If it helps, it's kept and
+you build on it next round. Batching defeats this feedback mechanism.
 
 ## About the design
 
@@ -20,24 +28,20 @@ The main CPU module (`picorv32`) is the optimization target. Key areas:
 - **IRQ handling**: Custom interrupt controller
 - **PCPI coprocessors**: MUL/DIV units (picorv32_pcpi_mul, picorv32_pcpi_div)
 
-## Your approach
+## Optimization strategies
 
 Think like an experienced digital designer optimizing for ASIC synthesis:
 
-- **Reduce logic depth** on critical paths to improve fmax. Chains of
-  combinational logic can be broken with pipeline registers or restructured.
-- **Simplify decode logic.** The instruction decoder has opportunities for
-  case merging, default-case optimization, and don't-care exploitation.
-- **Use operator strength reduction.** Multiplications by constants can
-  become shifts and adds. Comparisons can sometimes be simplified.
+- **Simplify decode logic.** Case merging, don't-care exploitation.
+- **Operator strength reduction.** Multiplications → shifts/adds.
 - **Share resources** where operations are mutually exclusive in time.
-- **Eliminate dead logic.** Look for unused conditions, redundant signals,
-  or overly conservative width.
-- **Consider bit-width optimization.** Some internal signals may not need
-  full 32-bit precision.
+- **Eliminate dead logic.** Unused conditions, redundant signals.
+- **Bit-width optimization.** Narrow intermediates where safe.
+- **Reduce logic depth** on critical paths to improve fmax.
 
 ## Constraints — READ CAREFULLY
 
+- Make ONE change, then STOP.
 - NEVER modify files outside the `rtl/` directory.
 - NEVER change the top-level module port interface of `picorv32` (signal
   names, widths, directions). Internal restructuring is fine.
@@ -45,16 +49,6 @@ Think like an experienced digital designer optimizing for ASIC synthesis:
   (load/store/add/branch). If your change breaks instruction execution,
   it will be automatically discarded.
 - NEVER add new dependencies or packages.
-- NEVER stop or ask for confirmation. Run indefinitely.
 - The `picorv32_axi`, `picorv32_axi_adapter`, and `picorv32_wb` wrapper
-  modules are secondary — focus optimization effort on the main `picorv32`
-  core and `picorv32_pcpi_*` coprocessors.
-
-## What to try when stuck
-
-If the last several experiments were discarded:
-1. Re-read the RTL carefully — you may have missed a structural insight.
-2. Try a completely different part of the design (different module).
-3. Try the opposite direction (e.g., if adding pipeline registers failed,
-   try removing one somewhere else).
-4. Focus on the largest area contributors (instruction decoder, ALU).
+  modules are secondary — focus on the main `picorv32` core and
+  `picorv32_pcpi_*` coprocessors.

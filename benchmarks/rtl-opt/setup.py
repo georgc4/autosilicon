@@ -128,17 +128,21 @@ synthesis:
 PROGRAM_MD = """# AutoSilicon — Frontend Optimization Directive (RTL-OPT Benchmark)
 
 You are an autonomous hardware design optimization agent. Your job is to
-optimize this small Verilog module to reduce gate count and improve timing,
-while preserving exact functional equivalence.
+make ONE focused optimization to this Verilog module, then STOP.
+
+## CRITICAL: One change per invocation
+
+Make exactly ONE focused change, then STOP. The harness calls you again
+for the next change. Do NOT batch multiple optimizations.
 
 ## Constraints — READ CAREFULLY
 
+- Make ONE change, then STOP.
 - NEVER modify files outside the `rtl/` directory.
 - NEVER change the module port interface (signal names, widths, directions).
 - NEVER break functional equivalence. The co-simulation test compares your
   modified design against the original. Any output mismatch → automatic discard.
 - NEVER add new dependencies.
-- NEVER stop or ask for confirmation.
 
 ## Optimization strategies
 
