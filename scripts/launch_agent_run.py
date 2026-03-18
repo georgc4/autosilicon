@@ -414,7 +414,8 @@ if __name__ == "__main__":
                 os.killpg(os.getpgid(proc.pid), _signal.SIGTERM)
             except OSError:
                 pass
-        sys.exit(130)
+        subprocess.run(["stty", "sane"], check=False)
+        os._exit(130)
 
     _signal.signal(_signal.SIGINT, _die)
     _signal.signal(_signal.SIGQUIT, _die)

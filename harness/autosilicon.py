@@ -963,13 +963,14 @@ if __name__ == "__main__":
     _active_agent_proc = None
 
     def _die(signum, _frame):
-        log.info("\nInterrupted (signal %d). Cleaning up...", signum)
         proc = _active_agent_proc
         if proc and proc.poll() is None:
             try:
                 os.killpg(proc.pid, signal.SIGTERM)
             except OSError:
                 pass
+        # Restore terminal state — Claude CLI leaves it in raw mode
+        subprocess.run(["stty", "sane"], check=False)
         os._exit(130)
 
     signal.signal(signal.SIGINT, _die)

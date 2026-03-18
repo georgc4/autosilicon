@@ -39,7 +39,8 @@ def _die(signum, _frame):
             os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
         except OSError:
             pass
-    sys.exit(130)
+    subprocess.run(["stty", "sane"], check=False)
+    os._exit(130)
 
 signal.signal(signal.SIGINT, _die)
 signal.signal(signal.SIGQUIT, _die)
