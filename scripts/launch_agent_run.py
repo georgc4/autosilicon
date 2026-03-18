@@ -244,32 +244,31 @@ def prepare_worktree(
     ensure_worktree_excludes(worktree_path)
 
     if created:
-        run(
-            [
-                "git",
-                "checkout",
-                seed_ref,
-                "--",
-                str(design_rel / "rtl"),
-                str(design_rel / "model"),
-            ],
-            cwd=worktree_path,
-        )
+        # Only checkout paths that exist in the seed ref
+        seed_paths = []
+        for subdir in ("rtl", "model"):
+            path = str(design_rel / subdir)
+            probe = capture(
+                ["git", "ls-tree", "--name-only", seed_ref, path + "/"],
+                cwd=worktree_path,
+                check=False,
+            )
+            if probe:
+                seed_paths.append(path)
+
+        if seed_paths:
+            run(
+                ["git", "checkout", seed_ref, "--"] + seed_paths,
+                cwd=worktree_path,
+            )
         seed_status = capture(
-            [
-                "git",
-                "status",
-                "--porcelain",
-                "--",
-                str(design_rel / "rtl"),
-                str(design_rel / "model"),
-            ],
+            ["git", "status", "--porcelain", "--"] + seed_paths,
             cwd=worktree_path,
             check=False,
-        )
+        ) if seed_paths else ""
         if seed_status:
             run(
-                ["git", "add", str(design_rel / "rtl"), str(design_rel / "model")],
+                ["git", "add"] + seed_paths,
                 cwd=worktree_path,
             )
             run(
