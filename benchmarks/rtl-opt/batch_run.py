@@ -24,9 +24,25 @@ Usage:
 import argparse
 import csv
 import json
+import os
+import signal
 import subprocess
 import sys
 from pathlib import Path
+
+_child_proc = None
+
+def _die(signum, _frame):
+    proc = _child_proc
+    if proc and proc.poll() is None:
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+        except OSError:
+            pass
+    sys.exit(130)
+
+signal.signal(signal.SIGINT, _die)
+signal.signal(signal.SIGQUIT, _die)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 DESIGNS_DIR = REPO_ROOT / "designs"
@@ -38,6 +54,16 @@ def find_rtlopt_designs(subset: list[str] | None = None) -> list[Path]:
     if subset:
         designs = [d for d in designs if d.name.replace("rtlopt_", "") in subset]
     return designs
+
+
+def _run_tracked(cmd: list[str]) -> int:
+    """Run a command, tracking it in _child_proc for signal handling."""
+    global _child_proc
+    proc = subprocess.Popen(cmd, cwd=REPO_ROOT, start_new_session=True)
+    _child_proc = proc
+    proc.wait()
+    _child_proc = None
+    return proc.returncode
 
 
 def run_iterative(design_dir: Path, n: int, args) -> int:
@@ -53,8 +79,7 @@ def run_iterative(design_dir: Path, n: int, args) -> int:
     ]
     if args.dry_run:
         cmd.append("--dry-run")
-    proc = subprocess.run(cmd, cwd=REPO_ROOT)
-    return proc.returncode
+    return _run_tracked(cmd)
 
 
 def run_best_of_n(design_dir: Path, n: int, args) -> int:
@@ -70,8 +95,7 @@ def run_best_of_n(design_dir: Path, n: int, args) -> int:
     ]
     if args.dry_run:
         cmd.append("--dry-run")
-    proc = subprocess.run(cmd, cwd=REPO_ROOT)
-    return proc.returncode
+    return _run_tracked(cmd)
 
 
 def collect_baseline_results(designs: list[Path]) -> dict:

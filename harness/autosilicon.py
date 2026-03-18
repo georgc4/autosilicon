@@ -303,13 +303,18 @@ def invoke_claude(prompt: str, design_dir: Path, executable: str,
         proc = subprocess.Popen(
             cmd, cwd=design_dir, start_new_session=True,
         )
+        # Expose to signal handler so Ctrl-C can kill it
+        global _active_agent_proc  # noqa: PLW0603
+        _active_agent_proc = proc
         proc.wait(timeout=timeout)
+        _active_agent_proc = None
         if proc.returncode != 0:
             log.warning("Claude CLI exited with code %d", proc.returncode)
             return False, ""
         return True, ""
     except subprocess.TimeoutExpired:
         os.killpg(proc.pid, 9)
+        _active_agent_proc = None
         log.warning("Claude CLI timed out after %ds", timeout)
         return False, ""
     except FileNotFoundError:
@@ -337,13 +342,17 @@ def invoke_codex(prompt: str, design_dir: Path, executable: str,
         proc = subprocess.Popen(
             cmd, cwd=design_dir, start_new_session=True,
         )
+        global _active_agent_proc  # noqa: PLW0603
+        _active_agent_proc = proc
         proc.wait(timeout=timeout)
+        _active_agent_proc = None
         if proc.returncode != 0:
             log.warning("Codex CLI exited with code %d", proc.returncode)
             return False, ""
         return True, ""
     except subprocess.TimeoutExpired:
         os.killpg(proc.pid, 9)
+        _active_agent_proc = None
         log.warning("Codex CLI timed out after %ds", timeout)
         return False, ""
     except FileNotFoundError:
@@ -949,7 +958,20 @@ def main() -> None:
 
 if __name__ == "__main__":
     import signal
-    def _die(*_): log.info("\nInterrupted."); os._exit(130)
+
+    # Track the currently-running agent subprocess so we can kill it on Ctrl-C.
+    _active_agent_proc = None
+
+    def _die(signum, _frame):
+        log.info("\nInterrupted (signal %d). Cleaning up...", signum)
+        proc = _active_agent_proc
+        if proc and proc.poll() is None:
+            try:
+                os.killpg(proc.pid, signal.SIGTERM)
+            except OSError:
+                pass
+        os._exit(130)
+
     signal.signal(signal.SIGINT, _die)
     signal.signal(signal.SIGQUIT, _die)
     main()

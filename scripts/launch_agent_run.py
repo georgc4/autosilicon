@@ -395,9 +395,27 @@ def main() -> int:
     print("command:     " + " ".join(shlex.quote(part) for part in cmd), flush=True)
     print(flush=True)
 
-    completed = subprocess.run(cmd, cwd=REPO_ROOT)
-    return completed.returncode
+    proc = subprocess.Popen(cmd, cwd=REPO_ROOT, start_new_session=True)
+    _active_proc = proc
+    proc.wait()
+    _active_proc = None
+    return proc.returncode
 
+
+_active_proc = None
 
 if __name__ == "__main__":
+    import signal as _signal
+
+    def _die(signum, _frame):
+        proc = _active_proc
+        if proc and proc.poll() is None:
+            try:
+                os.killpg(os.getpgid(proc.pid), _signal.SIGTERM)
+            except OSError:
+                pass
+        sys.exit(130)
+
+    _signal.signal(_signal.SIGINT, _die)
+    _signal.signal(_signal.SIGQUIT, _die)
     sys.exit(main())
