@@ -210,7 +210,8 @@ def git_status_lines(design_dir: Path) -> list[str]:
 
 def git_commit_all(design_dir: Path, message: str) -> str | None:
     """Stage RTL/model changes only, then commit. Returns commit hash or None."""
-    git(design_dir, "add", "rtl/", "model/")
+    paths = ["rtl/"] + (["model/"] if (design_dir / "model").is_dir() else [])
+    git(design_dir, "add", *paths)
     if not git_status_lines(design_dir):
         log.info("No changes to commit")
         return None
@@ -223,7 +224,8 @@ def git_revert_head(design_dir: Path) -> None:
     """Revert ONLY rtl/ and model/ from the last commit, preserving results/frontier."""
     try:
         # Restore rtl/ and model/ to the state before the last commit
-        git(design_dir, "checkout", "HEAD~1", "--", "rtl/", "model/")
+        paths = ["rtl/"] + (["model/"] if (design_dir / "model").is_dir() else [])
+        git(design_dir, "checkout", "HEAD~1", "--", *paths)
         git(design_dir, "commit", "-m", f"Revert \"{_get_head_subject(design_dir)}\"")
         log.info("Reverted RTL/model from HEAD")
     except subprocess.CalledProcessError:
