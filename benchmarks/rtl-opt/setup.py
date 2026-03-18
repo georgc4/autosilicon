@@ -339,6 +339,12 @@ def setup_design(design_name: str, src_dir: Path, dry_run: bool = False):
     # Write program.md
     (design_dir / "program.md").write_text(PROGRAM_MD)
 
+    # Copy golden reference for comparison
+    ref_file = src_dir / f"{design_name}_ref" / f"{design_name}_ref.v"
+    if ref_file.exists():
+        (design_dir / "golden").mkdir(exist_ok=True)
+        shutil.copy2(ref_file, design_dir / "golden" / f"{design_name}_ref.v")
+
     # Initialize as standalone git repo so the harness can commit
     subprocess.run(["git", "init", "-q"], cwd=design_dir, check=True)
     subprocess.run(["git", "add", "."], cwd=design_dir, check=True)
