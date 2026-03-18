@@ -329,8 +329,8 @@ async function poll() {
       fetchJSON('pareto_frontier.json'),
       fetchTSV('results.tsv'),
     ]);
-    // Only show tested configs (DW=16 for now)
-    const testedData = sweepData.filter(p => p.DATA_W === 16);
+    // Only show tested configs (DW=16, CI>=12 — verified passing)
+    const testedData = sweepData.filter(p => p.DATA_W === 16 && p.CORDIC_ITERS >= 12);
     const testedFrontier = frontier.filter(f => {
       return testedData.some(p => Math.abs(p.area - f.area) < 1);
     });
