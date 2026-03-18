@@ -4,7 +4,16 @@
 # Ctrl-C kills everything cleanly.
 
 set -euo pipefail
-trap 'echo "Interrupted."; kill 0; stty sane; exit 130' INT QUIT TERM
+
+cleanup() {
+    echo ""
+    echo "Cleaning up..."
+    kill 0 2>/dev/null || true
+    stty sane 2>/dev/null || true
+    exit 130
+}
+
+trap cleanup INT QUIT TERM
 
 cd "$(dirname "$0")/.."
-exec python3 benchmarks/rtl-opt/batch_run.py "$@"
+python3 benchmarks/rtl-opt/batch_run.py "$@"
