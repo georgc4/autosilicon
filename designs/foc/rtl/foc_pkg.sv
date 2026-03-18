@@ -22,10 +22,50 @@ package foc_pkg;
   localparam int PWM_MAX      = (1 << PWM_BITS) - 1;
   localparam int HALF_SCALE   = 1 << (PWM_BITS - 1);
 
-  // ── Fixed-Point Constants (Q1.15) ─────────────────────────────
-  localparam logic signed [DATA_W-1:0] CORDIC_GAIN = 16'h4DBA;  // 1/K ≈ 0.607253
-  localparam logic signed [DATA_W-1:0] INV_SQRT3   = 16'h49E7;  // 1/sqrt(3) ≈ 0.57735
-  localparam int                       SQRT3_INT   = 56756;      // sqrt(3) in Q1.15 ≈ 1.73205
+  // ── Fixed-Point Constants (scaled to FRAC_W) ─────────────────
+  // Lookup by FRAC_W: pre-computed round(value * 2^FRAC_W) for supported widths
+  function automatic integer cordic_gain_lut(input integer fw);
+    case (fw)
+      7:  cordic_gain_lut = 78;       // round(0.607253 * 128)
+      8:  cordic_gain_lut = 155;      // round(0.607253 * 256)
+      11: cordic_gain_lut = 1243;     // round(0.607253 * 2048)
+      12: cordic_gain_lut = 2487;     // round(0.607253 * 4096)
+      15: cordic_gain_lut = 19898;    // round(0.607253 * 32768)
+      16: cordic_gain_lut = 39797;    // round(0.607253 * 65536)
+      23: cordic_gain_lut = 5093984;  // round(0.607253 * 8388608)
+      default: cordic_gain_lut = 19898;
+    endcase
+  endfunction
+
+  function automatic integer inv_sqrt3_lut(input integer fw);
+    case (fw)
+      7:  inv_sqrt3_lut = 74;
+      8:  inv_sqrt3_lut = 148;
+      11: inv_sqrt3_lut = 1183;
+      12: inv_sqrt3_lut = 2365;
+      15: inv_sqrt3_lut = 18919;
+      16: inv_sqrt3_lut = 37837;
+      23: inv_sqrt3_lut = 4843239;
+      default: inv_sqrt3_lut = 18919;
+    endcase
+  endfunction
+
+  function automatic integer sqrt3_lut(input integer fw);
+    case (fw)
+      7:  sqrt3_lut = 222;
+      8:  sqrt3_lut = 443;
+      11: sqrt3_lut = 3547;
+      12: sqrt3_lut = 7094;
+      15: sqrt3_lut = 56756;
+      16: sqrt3_lut = 113512;
+      23: sqrt3_lut = 14529535;
+      default: sqrt3_lut = 56756;
+    endcase
+  endfunction
+
+  localparam logic signed [DATA_W-1:0] CORDIC_GAIN = DATA_W'(cordic_gain_lut(FRAC_W));
+  localparam logic signed [DATA_W-1:0] INV_SQRT3   = DATA_W'(inv_sqrt3_lut(FRAC_W));
+  localparam int                       SQRT3_INT   = sqrt3_lut(FRAC_W);
 
   // ── FSM State Encoding ─────────────────────────────────────────
   typedef enum logic [3:0] {

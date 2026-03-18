@@ -20,7 +20,18 @@ module foc_cordic #(
     output logic                    done
 );
 
-    import foc_pkg::*;
+    import foc_pkg::atan_lut;
+
+    // Compute CORDIC gain locally — package import shadows module params in Icarus
+    localparam logic signed [DATA_W-1:0] LOCAL_CORDIC_GAIN =
+        (FRAC_W ==  7) ? DATA_W'(78) :
+        (FRAC_W ==  8) ? DATA_W'(155) :
+        (FRAC_W == 11) ? DATA_W'(1243) :
+        (FRAC_W == 12) ? DATA_W'(2487) :
+        (FRAC_W == 15) ? DATA_W'(19898) :
+        (FRAC_W == 16) ? DATA_W'(39797) :
+        (FRAC_W == 23) ? DATA_W'(5093984) :
+                         DATA_W'(19898);
 
     localparam int ITER_W = $clog2(CORDIC_ITERS);
     localparam signed [DATA_W-1:0] POS_MAX = {1'b0, {(DATA_W-1){1'b1}}};
@@ -113,7 +124,7 @@ module foc_cordic #(
             case (cstate)
                 S_IDLE: begin
                     if (start) begin
-                        x_reg    <= CORDIC_GAIN;
+                        x_reg    <= LOCAL_CORDIC_GAIN;
                         y_reg    <= '0;
                         z_reg    <= {{2{1'b0}}, angle_q1};
                         quad_reg <= quadrant;

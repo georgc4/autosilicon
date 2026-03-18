@@ -61,15 +61,20 @@ module foc_clarke #(
         end
     end
 
-    // Stage 2: multiply sum by INV_SQRT3 via shift-add chain, truncate
-    // INV_SQRT3 = 18919 = 2^14 + 2^11 + 2^9 - 2^5 + 2^3 - 2^0 (CSD form)
+    // Stage 2: multiply sum by INV_SQRT3, truncate
+    localparam logic signed [DATA_W-1:0] LOCAL_INV_SQRT3 =
+        (FRAC_W ==  7) ? DATA_W'(74) :
+        (FRAC_W ==  8) ? DATA_W'(148) :
+        (FRAC_W == 11) ? DATA_W'(1183) :
+        (FRAC_W == 12) ? DATA_W'(2365) :
+        (FRAC_W == 15) ? DATA_W'(18919) :
+        (FRAC_W == 16) ? DATA_W'(37837) :
+        (FRAC_W == 23) ? DATA_W'(4843239) :
+                         DATA_W'(18919);
     logic signed [2*DATA_W-1:0] product;
-    logic signed [2*DATA_W-1:0] se;
 
     always_comb begin
-        se = {{DATA_W{sum_stage[DATA_W-1]}}, sum_stage};
-        product = (se <<< 14) + (se <<< 11) + (se <<< 9)
-                - (se <<< 5) + (se <<< 3) - se;
+        product = sum_stage * $signed(LOCAL_INV_SQRT3);
     end
 
     always_ff @(posedge clk or negedge rst_n) begin
