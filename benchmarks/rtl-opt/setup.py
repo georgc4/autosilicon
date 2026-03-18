@@ -11,6 +11,7 @@ Usage:
 import argparse
 import os
 import shutil
+import subprocess
 from pathlib import Path
 
 PROJ_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -337,6 +338,14 @@ def setup_design(design_name: str, src_dir: Path, dry_run: bool = False):
 
     # Write program.md
     (design_dir / "program.md").write_text(PROGRAM_MD)
+
+    # Initialize as standalone git repo so the harness can commit
+    subprocess.run(["git", "init", "-q"], cwd=design_dir, check=True)
+    subprocess.run(["git", "add", "."], cwd=design_dir, check=True)
+    subprocess.run(
+        ["git", "commit", "-q", "-m", f"Initial RTL-OPT baseline: {design_name}"],
+        cwd=design_dir, check=True,
+    )
 
     print(f"  OK {design_name} -> {design_dir}")
     return True
