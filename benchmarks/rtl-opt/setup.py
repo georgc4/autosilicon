@@ -125,33 +125,16 @@ synthesis:
 """
 
 
-PROGRAM_MD = """# AutoSilicon — Frontend Optimization Directive (RTL-OPT Benchmark)
+PROGRAM_MD = """You are optimizing a small Verilog module (Sky130).
+The harness evaluates your changes — do NOT run make, lint, test, or synth yourself.
 
-You are an autonomous hardware design optimization agent. Your job is to
-make ONE focused optimization to this Verilog module, then STOP.
+Make ONE focused RTL change to reduce gate count while keeping tests passing.
+Your change is kept if it reduces cell count without breaking functional equivalence.
+Only edit .v files in rtl/. Do NOT touch tb/, synth/, golden/, or Makefile.
 
-## CRITICAL: One change per invocation
+After your edit, write a one-line summary of what you changed and why to the file rtl/.change_summary (overwrite it each time).
 
-Make exactly ONE focused change, then STOP. The harness calls you again
-for the next change. Do NOT batch multiple optimizations.
-
-## Constraints — READ CAREFULLY
-
-- Make ONE change, then STOP.
-- NEVER modify files outside the `rtl/` directory.
-- NEVER change the module port interface (signal names, widths, directions).
-- NEVER break functional equivalence. The co-simulation test compares your
-  modified design against the original. Any output mismatch → automatic discard.
-- NEVER add new dependencies.
-
-## Optimization strategies
-
-- **Operator strength reduction:** Replace multiplications with shifts/adds.
-- **Bit-width optimization:** Narrow intermediate signals where safe.
-- **Resource sharing:** Merge duplicate operations.
-- **Control simplification:** Simplify case/if logic, exploit don't-cares.
-- **Precomputation / LUT conversion:** Replace runtime computation with constants.
-- **State encoding:** Use more efficient FSM encodings.
+Do NOT change the module port interface (signal names, widths, directions).
 """
 
 
