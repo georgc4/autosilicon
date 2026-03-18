@@ -69,7 +69,7 @@ lint:
 # Compares outputs of the (possibly modified) design against the
 # frozen original copy. Uses random stimulus.
 tb/cosim_tb.vvp: $(RTL_FILES) tb/original.v tb/cosim_tb.v
-	$(IVERILOG) -o $@ tb/cosim_tb.v $(RTL_FILES) tb/original.v
+	$(IVERILOG) -g2012 -o $@ tb/cosim_tb.v $(RTL_FILES) tb/original.v
 
 test: tb/cosim_tb.vvp
 	@echo "Running co-simulation test for {design_name}..."
@@ -155,10 +155,16 @@ def gen_cosim_testbench(design_name: str, verilog_path: Path) -> str:
         # Fallback: just compile and run, no comparison
         return _fallback_tb(design_name)
 
-    # Find input/output declarations in the body
+    # Extract only the top module body (from its declaration to the next
+    # 'endmodule'), so we don't pick up ports from helper modules.
+    top_start = mod_match.start()
+    endmod = re.search(r'\bendmodule\b', content[top_start:])
+    top_body = content[top_start:top_start + endmod.end()] if endmod else content[top_start:]
+
+    # Find input/output declarations in the top module body only
     inputs = []
     outputs = []
-    for line in content.split('\n'):
+    for line in top_body.split('\n'):
         line = line.strip().rstrip(',').rstrip(';')
         # Match: input/output [wire/reg] [signed] [width] name
         m = re.match(
@@ -273,16 +279,34 @@ endmodule
 
 
 def create_original_copy(design_name: str, src_path: Path) -> str:
-    """Create a renamed copy of the original design for co-simulation."""
+    """Create a renamed copy of the original design for co-simulation.
+
+    Renames ALL modules (not just the top) by appending _original,
+    and updates all instantiations to match. This avoids duplicate
+    module name collisions when iverilog compiles both files together.
+    """
+    import re
     with open(src_path) as f:
         content = f.read()
-    import re
-    # Rename module to <name>_original
-    content = re.sub(
-        rf'\bmodule\s+{re.escape(design_name)}\b',
-        f'module {design_name}_original',
-        content
-    )
+
+    # Find all module names defined in this file (skip comments)
+    # Only match 'module' at the start of a line (possibly with whitespace)
+    module_names = re.findall(r'^\s*module\s+(\w+)', content, re.MULTILINE)
+
+    for mod in module_names:
+        # Rename module definition
+        content = re.sub(
+            rf'\bmodule\s+{re.escape(mod)}\b',
+            f'module {mod}_original',
+            content,
+        )
+        # Rename instantiations of this module
+        content = re.sub(
+            rf'\b{re.escape(mod)}\s+(\w+)\s*\(',
+            rf'{mod}_original \1(',
+            content,
+        )
+
     return content
 
 
