@@ -47,6 +47,21 @@ RETRY_BACKOFF_BASE = 10  # seconds
 
 CLAUDE_ALLOWED_TOOLS = "Read,Edit,Write"
 SUPPORTED_AGENT_CLIS = ("claude", "codex")
+
+# Track the currently-running agent subprocess so Ctrl-C can kill it.
+# Must be module-level so invoke_claude's `global _active_agent_proc`
+# and _die() reference the same variable.
+_active_agent_proc = None
+
+def _die(signum, _frame):
+    proc = _active_agent_proc
+    if proc and proc.poll() is None:
+        try:
+            os.killpg(proc.pid, signum)
+        except OSError:
+            pass
+    subprocess.run(["stty", "sane"], check=False)
+    os._exit(130)
 AGENT_EXECUTABLE_CANDIDATES = {
     "codex": (
         "~/Applications/Codex.app/Contents/Resources/codex",
@@ -958,21 +973,6 @@ def main() -> None:
 
 if __name__ == "__main__":
     import signal
-
-    # Track the currently-running agent subprocess so we can kill it on Ctrl-C.
-    _active_agent_proc = None
-
-    def _die(signum, _frame):
-        proc = _active_agent_proc
-        if proc and proc.poll() is None:
-            try:
-                os.killpg(proc.pid, signal.SIGTERM)
-            except OSError:
-                pass
-        # Restore terminal state — Claude CLI leaves it in raw mode
-        subprocess.run(["stty", "sane"], check=False)
-        os._exit(130)
-
     signal.signal(signal.SIGINT, _die)
     signal.signal(signal.SIGQUIT, _die)
     main()
