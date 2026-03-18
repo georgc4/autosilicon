@@ -23,6 +23,9 @@
     box-shadow: 0 4px 12px rgba(0,0,0,0.4);
   }
   #tooltip .tt-title { color: #58a6ff; font-weight: 600; font-size: 11px; margin-bottom: 3px; }
+  .legend { display: flex; gap: 15px; margin: 8px 0; font-size: 11px; }
+  .legend-item { display: flex; align-items: center; gap: 5px; }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
   table { border-collapse: collapse; margin-top: 12px; font-size: 11px; width: 100%; }
   th { background: #161b22; color: #8b949e; text-align: left; padding: 6px 8px; border-bottom: 1px solid #30363d; }
   td { padding: 5px 8px; border-bottom: 1px solid #21262d; }
@@ -34,34 +37,48 @@
 <body>
 <h1>AutoSilicon - FOC Pareto Dashboard</h1>
 <div class="stats">
+  <div class="stat"><div class="label">Sweep Points</div><div class="value" id="n-points">-</div></div>
   <div class="stat"><div class="label">Experiments</div><div class="value" id="n-exp">-</div></div>
-  <div class="stat"><div class="label">Kept</div><div class="value" id="n-kept">-</div></div>
   <div class="stat"><div class="label">Best Area (um2)</div><div class="value" id="best-area">-</div><div class="delta" id="area-delta"></div></div>
   <div class="stat"><div class="label">Best fmax (MHz)</div><div class="value" id="best-fmax">-</div><div class="delta" id="fmax-delta"></div></div>
   <div class="stat"><div class="label">Frontier</div><div class="value" id="n-frontier">-</div></div>
 </div>
 
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#d2a8ff"></div>DW=12</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#58a6ff"></div>DW=16</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#3fb950"></div>DW=24</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#f0883e;border-radius:0;width:8px;height:8px"></div>Baseline</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#fff;border:2px solid #58a6ff;width:6px;height:6px"></div>Frontier</div>
+</div>
+
 <div class="charts">
   <div class="chart-wrap">
-    <canvas id="pareto" width="700" height="420"></canvas>
+    <canvas id="pareto" width="900" height="500"></canvas>
     <div id="tooltip"></div>
   </div>
-  <canvas id="timeline" width="500" height="420"></canvas>
+</div>
+
+<div class="charts">
+  <canvas id="timeline-area" width="600" height="280"></canvas>
+  <canvas id="timeline-fmax" width="600" height="280"></canvas>
 </div>
 
 <table id="results-table">
-  <thead><tr><th>#</th><th>Status</th><th>Area</th><th>fmax</th><th>Cells</th><th>Description</th></tr></thead>
+  <thead><tr><th>#</th><th>Status</th><th>Area</th><th>fmax</th><th>Cells</th><th>Config</th><th>Description</th></tr></thead>
   <tbody></tbody>
 </table>
 <div id="status">Loading...</div>
 
 <script>
-const POLL_MS = 10000;
+const POLL_MS = 15000;
 const baseline = { area: 215164, fmax: 171.2 };
 const dpr = window.devicePixelRatio || 1;
 const fmaxToP = f => 1000.0 / f;
 
-// Store drawn point positions for hit-testing
+const DW_COLORS = { 12: '#d2a8ff', 16: '#58a6ff', 24: '#3fb950', 32: '#f85149' };
+const DW_COLORS_DIM = { 12: 'rgba(210,168,255,0.25)', 16: 'rgba(88,166,255,0.25)', 24: 'rgba(63,185,80,0.25)', 32: 'rgba(248,81,73,0.25)' };
+
 let drawnPoints = [];
 
 const _hiDpiDone = new Set();
@@ -81,6 +98,11 @@ function hiDpiCanvas(canvas) {
   return ctx;
 }
 
+async function fetchJSON(url) {
+  const r = await fetch(url + '?t=' + Date.now());
+  return r.json();
+}
+
 async function fetchTSV(url) {
   const r = await fetch(url + '?t=' + Date.now());
   const text = await r.text();
@@ -95,211 +117,191 @@ async function fetchTSV(url) {
   });
 }
 
-async function fetchJSON(url) {
-  const r = await fetch(url + '?t=' + Date.now());
-  return r.json();
-}
-
-function drawPareto(canvas, rows, frontier) {
+function drawPareto(canvas, sweepData, frontier) {
   const ctx = hiDpiCanvas(canvas);
   const W = canvas.width / dpr, H = canvas.height / dpr;
-  const pad = { t: 25, r: 25, b: 45, l: 65 };
+  const pad = { t: 25, r: 30, b: 45, l: 70 };
   drawnPoints = [];
 
-  const kept = rows.filter(r => r.status === 'keep' && r.area);
-  if (!kept.length) return;
+  if (!sweepData.length) return;
 
-  const areas = kept.map(r => +r.area);
-  const periods = kept.map(r => fmaxToP(+r.estimated_fmax_mhz));
-  const baseP = fmaxToP(baseline.fmax);
-  const allA = [...areas, baseline.area];
-  const allP = [...periods, baseP];
-  const minA = Math.min(...allA) * 0.99, maxA = Math.max(...allA) * 1.01;
-  const minP = Math.min(...allP) * 0.99, maxP = Math.max(...allP) * 1.01;
+  const allA = [...sweepData.map(p => p.area), baseline.area];
+  const allP = [...sweepData.map(p => p.period_ns), fmaxToP(baseline.fmax)];
+  const minA = Math.min(...allA) * 0.97, maxA = Math.max(...allA) * 1.03;
+  const minP = Math.min(...allP) * 0.97, maxP = Math.max(...allP) * 1.03;
 
   const xS = a => pad.l + (a - minA) / (maxA - minA) * (W - pad.l - pad.r);
   const yS = p => H - pad.b - (p - minP) / (maxP - minP) * (H - pad.t - pad.b);
 
   // Grid
   ctx.strokeStyle = '#21262d'; ctx.lineWidth = 0.5;
-  for (let i = 0; i <= 5; i++) {
-    const x = pad.l + i * (W - pad.l - pad.r) / 5;
+  for (let i = 0; i <= 6; i++) {
+    const x = pad.l + i * (W - pad.l - pad.r) / 6;
     ctx.beginPath(); ctx.moveTo(x, pad.t); ctx.lineTo(x, H - pad.b); ctx.stroke();
     ctx.fillStyle = '#484f58'; ctx.font = '9px -apple-system, sans-serif'; ctx.textAlign = 'center';
-    ctx.fillText(Math.round(minA + i * (maxA - minA) / 5).toLocaleString(), x, H - pad.b + 14);
-    const y = pad.t + i * (H - pad.t - pad.b) / 5;
+    ctx.fillText(Math.round(minA + i * (maxA - minA) / 6).toLocaleString(), x, H - pad.b + 14);
+    const y = pad.t + i * (H - pad.t - pad.b) / 6;
     ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W - pad.r, y); ctx.stroke();
     ctx.textAlign = 'right';
-    ctx.fillText((maxP - i * (maxP - minP) / 5).toFixed(2), pad.l - 6, y + 3);
+    ctx.fillText((maxP - i * (maxP - minP) / 6).toFixed(2), pad.l - 6, y + 3);
   }
 
   // Axis labels
   ctx.fillStyle = '#8b949e'; ctx.font = '10px -apple-system, sans-serif';
   ctx.textAlign = 'center';
   ctx.fillText('Area (um2)', W / 2, H - 5);
-  ctx.save(); ctx.translate(12, H / 2); ctx.rotate(-Math.PI / 2);
+  ctx.save(); ctx.translate(14, H / 2); ctx.rotate(-Math.PI / 2);
   ctx.fillText('Period (ns)', 0, 0); ctx.restore();
 
   ctx.fillStyle = '#3fb950'; ctx.font = '9px -apple-system, sans-serif'; ctx.textAlign = 'left';
   ctx.fillText('better', pad.l + 2, H - pad.b - 4);
 
-  // Cloud: non-frontier kept points (muted)
-  kept.forEach(r => {
-    const a = +r.area, p = fmaxToP(+r.estimated_fmax_mhz);
-    const onFrontier = frontier.some(f => Math.abs(f.area - a) < 1 && Math.abs(f.estimated_fmax_mhz - r.estimated_fmax_mhz) < 0.01);
-    if (onFrontier) return;
-    const x = xS(a), y = yS(p);
-    ctx.fillStyle = 'rgba(63,185,80,0.2)';
+  // All sweep points colored by DATA_W
+  sweepData.forEach(p => {
+    const x = xS(p.area), y = yS(p.period_ns);
+    const dw = p.DATA_W || 16;
+    ctx.fillStyle = DW_COLORS_DIM[dw] || DW_COLORS_DIM[16];
     ctx.beginPath(); ctx.arc(x, y, 2, 0, Math.PI * 2); ctx.fill();
   });
 
   // Baseline
-  const bx = xS(baseline.area), by = yS(baseP);
+  const bx = xS(baseline.area), by = yS(fmaxToP(baseline.fmax));
   ctx.fillStyle = '#f0883e';
-  ctx.beginPath(); ctx.arc(bx, by, 4, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#f0883e'; ctx.font = '9px -apple-system, sans-serif'; ctx.textAlign = 'left';
-  ctx.fillText('baseline', bx + 7, by + 3);
+  ctx.beginPath(); ctx.arc(bx, by, 5, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#f0883e'; ctx.font = '10px -apple-system, sans-serif'; ctx.textAlign = 'left';
+  ctx.fillText('baseline', bx + 8, by + 4);
 
   // Frontier line
   const fSorted = [...frontier].sort((a, b) => a.area - b.area);
   if (fSorted.length > 1) {
-    ctx.strokeStyle = 'rgba(88,166,255,0.6)'; ctx.lineWidth = 1.5; ctx.setLineDash([4, 3]);
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 1.5; ctx.setLineDash([4, 3]);
     ctx.beginPath();
     ctx.moveTo(xS(fSorted[0].area), yS(fmaxToP(fSorted[0].estimated_fmax_mhz)));
     fSorted.forEach(p => ctx.lineTo(xS(p.area), yS(fmaxToP(p.estimated_fmax_mhz))));
     ctx.stroke(); ctx.setLineDash([]);
   }
 
-  // Frontier points (prominent, with ring)
+  // Frontier points
   fSorted.forEach(fp => {
     const x = xS(fp.area), y = yS(fmaxToP(fp.estimated_fmax_mhz));
-    // Outer ring
-    ctx.strokeStyle = '#58a6ff'; ctx.lineWidth = 1.5;
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI * 2); ctx.stroke();
-    // Inner fill
     ctx.fillStyle = '#58a6ff';
     ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fill();
 
-    // Find matching experiment for tooltip data
-    const match = kept.find(r => Math.abs(+r.area - fp.area) < 1);
+    const match = sweepData.find(p => Math.abs(p.area - fp.area) < 1);
     drawnPoints.push({
       x, y, radius: 8, frontier: true,
-      area: fp.area,
-      fmax: fp.estimated_fmax_mhz,
+      area: fp.area, fmax: fp.estimated_fmax_mhz,
       period: fmaxToP(fp.estimated_fmax_mhz),
       exp: match ? match.experiment_id : '?',
-      commit: match ? (match.commit || '').substring(0, 7) : '',
-      desc: match ? (match.description || '') : '',
-      config: match ? (match.config_params || '') : '',
+      commit: match ? match.commit : '',
+      config: match ? match.config_id : '',
+      dw: match ? match.DATA_W : '',
+      ci: match ? match.CORDIC_ITERS : '',
     });
   });
 }
 
-// Tooltip on hover
+// Tooltip
 const paretoCanvas = document.getElementById('pareto');
 const tooltip = document.getElementById('tooltip');
-
 paretoCanvas.addEventListener('mousemove', e => {
   const rect = paretoCanvas.getBoundingClientRect();
-  const mx = e.clientX - rect.left;
-  const my = e.clientY - rect.top;
-
+  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
   let hit = null;
   for (const pt of drawnPoints) {
     if (!pt.frontier) continue;
     const dx = mx - pt.x, dy = my - pt.y;
-    if (dx * dx + dy * dy < pt.radius * pt.radius) { hit = pt; break; }
+    if (dx*dx + dy*dy < pt.radius*pt.radius) { hit = pt; break; }
   }
-
   if (hit) {
     tooltip.style.display = 'block';
     tooltip.style.left = (hit.x + 12) + 'px';
     tooltip.style.top = (hit.y - 10) + 'px';
     tooltip.innerHTML =
-      '<div class="tt-title">Experiment ' + hit.exp + '</div>' +
+      '<div class="tt-title">Exp ' + hit.exp + ' / Config ' + hit.config + '</div>' +
       'Area: ' + Math.round(hit.area).toLocaleString() + ' um2\n' +
       'fmax: ' + hit.fmax.toFixed(1) + ' MHz (' + hit.period.toFixed(2) + ' ns)\n' +
-      'Commit: ' + hit.commit;
+      'Commit: ' + hit.commit + '\n' +
+      'DW=' + hit.dw + ' CI=' + hit.ci;
   } else {
     tooltip.style.display = 'none';
   }
 });
-
 paretoCanvas.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
 
-function drawTimeline(canvas, rows) {
+function drawTimeline(canvas, rows, metric, label) {
   const ctx = hiDpiCanvas(canvas);
   const W = canvas.width / dpr, H = canvas.height / dpr;
-  const pad = { t: 25, r: 25, b: 45, l: 65 };
+  const pad = { t: 20, r: 25, b: 40, l: 65 };
 
-  const kept = rows.filter(r => r.status === 'keep' && r.area);
+  // Only default config kept experiments
+  const kept = rows.filter(r => r.status === 'keep' && r[metric] &&
+    (!r.config_id || r.config_id === '32'));
   if (!kept.length) return;
 
-  const areas = [baseline.area, ...kept.map(r => +r.area)];
+  const baseVal = metric === 'area' ? baseline.area : baseline.fmax;
+  const vals = [baseVal, ...kept.map(r => +r[metric])];
   const labels = ['base', ...kept.map(r => r.experiment_id)];
-  const minA = Math.min(...areas) * 0.997, maxA = Math.max(...areas) * 1.003;
+  const minV = Math.min(...vals) * 0.995, maxV = Math.max(...vals) * 1.005;
 
-  const xS = i => pad.l + (areas.length > 1 ? i / (areas.length - 1) : 0.5) * (W - pad.l - pad.r);
-  const yS = a => H - pad.b - (a - minA) / (maxA - minA) * (H - pad.t - pad.b);
+  const xS = i => pad.l + (vals.length > 1 ? i / (vals.length - 1) : 0.5) * (W - pad.l - pad.r);
+  const yS = v => H - pad.b - (v - minV) / (maxV - minV) * (H - pad.t - pad.b);
 
-  // Grid
   ctx.strokeStyle = '#21262d'; ctx.lineWidth = 0.5;
   for (let i = 0; i <= 4; i++) {
     const y = pad.t + i * (H - pad.t - pad.b) / 4;
     ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W - pad.r, y); ctx.stroke();
     ctx.fillStyle = '#484f58'; ctx.font = '9px -apple-system, sans-serif'; ctx.textAlign = 'right';
-    ctx.fillText(Math.round(maxA - i * (maxA - minA) / 4).toLocaleString(), pad.l - 6, y + 3);
+    const v = maxV - i * (maxV - minV) / 4;
+    ctx.fillText(metric === 'area' ? Math.round(v).toLocaleString() : v.toFixed(1), pad.l - 6, y + 3);
   }
 
   ctx.fillStyle = '#8b949e'; ctx.font = '10px -apple-system, sans-serif'; ctx.textAlign = 'center';
-  ctx.fillText('Area (um2) over kept experiments', W / 2, H - 5);
+  ctx.fillText(label + ' (DW=16, default config)', W / 2, H - 5);
 
-  // Line
-  ctx.strokeStyle = '#3fb950'; ctx.lineWidth = 1.5;
+  const color = metric === 'area' ? '#3fb950' : '#58a6ff';
+  ctx.strokeStyle = color; ctx.lineWidth = 1.5;
   ctx.beginPath();
-  areas.forEach((a, i) => { i === 0 ? ctx.moveTo(xS(i), yS(a)) : ctx.lineTo(xS(i), yS(a)); });
+  vals.forEach((v, i) => { i === 0 ? ctx.moveTo(xS(i), yS(v)) : ctx.lineTo(xS(i), yS(v)); });
   ctx.stroke();
 
-  // Fill under
-  ctx.fillStyle = 'rgba(63,185,80,0.08)';
+  ctx.fillStyle = color.replace(')', ',0.08)').replace('rgb', 'rgba');
   ctx.beginPath();
-  ctx.moveTo(xS(0), yS(areas[0]));
-  areas.forEach((a, i) => ctx.lineTo(xS(i), yS(a)));
-  ctx.lineTo(xS(areas.length - 1), H - pad.b);
+  ctx.moveTo(xS(0), yS(vals[0]));
+  vals.forEach((v, i) => ctx.lineTo(xS(i), yS(v)));
+  ctx.lineTo(xS(vals.length - 1), H - pad.b);
   ctx.lineTo(xS(0), H - pad.b);
   ctx.closePath(); ctx.fill();
 
-  // Points + labels
-  areas.forEach((a, i) => {
-    ctx.fillStyle = i === 0 ? '#f0883e' : '#3fb950';
-    ctx.beginPath(); ctx.arc(xS(i), yS(a), 2.5, 0, Math.PI * 2); ctx.fill();
-    if (areas.length < 30 || i === 0 || i === areas.length - 1) {
-      ctx.fillStyle = '#484f58'; ctx.font = '8px -apple-system, sans-serif'; ctx.textAlign = 'center';
-      ctx.fillText(labels[i], xS(i), H - pad.b + 14);
-    }
+  vals.forEach((v, i) => {
+    ctx.fillStyle = i === 0 ? '#f0883e' : color;
+    ctx.beginPath(); ctx.arc(xS(i), yS(v), 2.5, 0, Math.PI * 2); ctx.fill();
   });
 }
 
 function updateTable(rows) {
   const tbody = document.querySelector('#results-table tbody');
   tbody.innerHTML = '';
-  [...rows].reverse().forEach(r => {
+  const kept = rows.filter(r => r.status === 'keep');
+  [...kept].reverse().slice(0, 30).forEach(r => {
     const tr = document.createElement('tr');
-    tr.className = r.status === 'keep' ? 'keep' : 'discard';
+    tr.className = 'keep';
     const area = r.area ? Number(+r.area).toLocaleString(undefined, {maximumFractionDigits: 0}) : '-';
     const fmax = r.estimated_fmax_mhz ? (+r.estimated_fmax_mhz).toFixed(1) : '-';
     const cells = r.cell_count || '-';
+    const cfg = r.config_id || '-';
     const desc = r.description || '';
-    const status = r.status === 'keep' ? 'keep' : r.status.replace('discard_', '');
-    tr.innerHTML = '<td>' + r.experiment_id + '</td><td>' + status + '</td><td>' + area + '</td><td>' + fmax + '</td><td>' + cells + '</td><td>' + desc + '</td>';
+    tr.innerHTML = '<td>' + r.experiment_id + '</td><td>keep</td><td>' + area + '</td><td>' + fmax + '</td><td>' + cells + '</td><td>' + cfg + '</td><td>' + desc + '</td>';
     tbody.appendChild(tr);
   });
 }
 
-function updateStats(rows, frontier) {
-  const kept = rows.filter(r => r.status === 'keep');
-  document.getElementById('n-exp').textContent = rows.length;
-  document.getElementById('n-kept').textContent = kept.length;
+function updateStats(sweepData, frontier) {
+  const exps = new Set(sweepData.map(p => p.experiment_id));
+  document.getElementById('n-points').textContent = sweepData.length;
+  document.getElementById('n-exp').textContent = exps.size;
   document.getElementById('n-frontier').textContent = frontier.length;
 
   if (frontier.length) {
@@ -322,12 +324,22 @@ function updateStats(rows, frontier) {
 
 async function poll() {
   try {
-    const [rows, frontier] = await Promise.all([fetchTSV('results.tsv'), fetchJSON('pareto_frontier.json')]);
-    updateStats(rows, frontier);
-    drawPareto(document.getElementById('pareto'), rows, frontier);
-    drawTimeline(document.getElementById('timeline'), rows);
+    const [sweepData, frontier, rows] = await Promise.all([
+      fetchJSON('all_sweeps.json'),
+      fetchJSON('pareto_frontier.json'),
+      fetchTSV('results.tsv'),
+    ]);
+    // Only show tested configs (DW=16 for now)
+    const testedData = sweepData.filter(p => p.DATA_W === 16);
+    const testedFrontier = frontier.filter(f => {
+      return testedData.some(p => Math.abs(p.area - f.area) < 1);
+    });
+    updateStats(testedData, testedFrontier.length ? testedFrontier : frontier);
+    drawPareto(document.getElementById('pareto'), testedData, testedFrontier.length ? testedFrontier : frontier);
+    drawTimeline(document.getElementById('timeline-area'), rows, 'area', 'Area (um2)');
+    drawTimeline(document.getElementById('timeline-fmax'), rows, 'estimated_fmax_mhz', 'fmax (MHz)');
     updateTable(rows);
-    document.getElementById('status').textContent = 'Updated ' + new Date().toLocaleTimeString() + ' | polling every 10s';
+    document.getElementById('status').textContent = sweepData.length + ' sweep points | Updated ' + new Date().toLocaleTimeString();
   } catch (e) {
     document.getElementById('status').textContent = 'Error: ' + e.message;
   }
