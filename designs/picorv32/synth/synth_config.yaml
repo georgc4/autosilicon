@@ -1,0 +1,29 @@
+# PicoRV32 RISC-V CPU — Synthesis Configuration
+# Benchmark design for AutoSilicon evaluation
+
+design:
+  name: "picorv32"
+  top_module: "picorv32"
+
+rtl_files:
+  - "rtl/picorv32.v"
+
+# Default: standard config with MUL/DIV/IRQ, no compressed ISA
+defaults: {}
+
+# No parameterized sweep for PicoRV32 — parameters are hardcoded in RTL
+# The LLM optimizes the RTL directly rather than exploring parameter space
+parameters: {}
+
+presets:
+  quick:
+    description: "Single default configuration"
+
+sky130:
+  liberty_file: "${OPENLANE_ROOT}/sky130A/libs.ref/sky130_fd_sc_hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib"
+  fallback: "generic"
+
+synthesis:
+  yosys_binary: "yosys"
+  parallel_jobs: 1
+  timeout_seconds: 300

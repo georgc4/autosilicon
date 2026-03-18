@@ -20,7 +20,7 @@ module foc_cordic #(
     output logic                    done
 );
 
-    import foc_pkg::atan_lut;
+    import foc_pkg::*;
 
     // Compute CORDIC gain locally — package import shadows module params in Icarus
     localparam logic signed [DATA_W-1:0] LOCAL_CORDIC_GAIN =

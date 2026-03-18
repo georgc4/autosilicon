@@ -65,6 +65,8 @@ def get_last_experiment_id(path: Path) -> int:
         with open(path) as f:
             reader = csv.DictReader(f, delimiter='\t')
             for row in reader:
+                if _is_derived_config_row(row):
+                    continue
                 try:
                     eid = int(row.get("experiment_id", 0))
                     if eid > max_id:
@@ -80,16 +82,25 @@ def get_latest_metrics(path: Path, mode: str) -> dict | None:
     """Get metrics from the last 'keep' row in results.tsv."""
     if not path.is_file():
         return None
-    lines = path.read_text().strip().split("\n")
-    if len(lines) <= 1:
+    rows = []
+    try:
+        with open(path) as f:
+            reader = csv.DictReader(f, delimiter='\t')
+            rows = list(reader)
+    except Exception:
         return None
-    cols = get_columns(mode)
-    # Walk backwards to find last 'keep'
-    for line in reversed(lines[1:]):
-        fields = line.split("\t")
-        if len(fields) < len(cols):
+
+    # Walk backwards to find the last canonical keep row.
+    for row in reversed(rows):
+        if _is_derived_config_row(row):
             continue
-        row = dict(zip(cols, fields))
         if row.get("status") == "keep":
-            return row
+            cols = get_columns(mode)
+            return {c: row.get(c, "") for c in cols}
     return None
+
+
+def _is_derived_config_row(row: dict) -> bool:
+    """Return True for post hoc multi-config rows that should not drive resume state."""
+    config_id = (row.get("config_id") or "").strip()
+    return bool(config_id and config_id not in {"0", "32"})

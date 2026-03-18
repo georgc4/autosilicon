@@ -1,14 +1,50 @@
+# Python
 .venv/
-openlane2/
 __pycache__/
 *.pyc
-*.vcd
-sim_build/
-results.xml
-designs/*/synth/results/
+
+# AutoSilicon runtime
+.autosilicon-worktrees/
 designs/*/autosilicon.log
+designs/*/autosilicon_status*.json
 designs/*/.autosilicon_*
-*.log
+.change_summary
+
+# Experiment artifacts
+designs/*/runs/*
+!designs/*/runs/README.md
+designs/*/quarantine/*
+!designs/*/quarantine/README.md
+scripts/quarantine/*
+!scripts/quarantine/README.md
 results.tsv
 pareto_frontier.json
-.change_summary
+
+# Synthesis outputs
+designs/*/synth/results/
+{W}
+*.log
+
+# Simulation outputs
+sim_build/
+obj_dir/
+*.vcd
+*.vvp
+results.xml
+test-results/
+
+# Sweep data
+designs/*/all_sweeps.json
+designs/*/sweep_history.json
+
+# OpenLane / PnR
+openlane2/
+
+# OS
+.DS_Store
+
+# Generated benchmark designs (recreate via benchmarks/rtl-opt/setup.py)
+designs/rtlopt_*/
+
+# Baseline metrics (keep — these are reference data)
+!designs/*/baseline_metrics.json

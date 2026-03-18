@@ -2,351 +2,1065 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>AutoSilicon - FOC Pareto Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AutoSilicon FOC FE Monitor</title>
 <style>
-  body { background: #0d1117; color: #c9d1d9; font-family: -apple-system, 'Helvetica Neue', sans-serif; margin: 20px; }
-  h1 { color: #58a6ff; font-size: 16px; letter-spacing: 0.5px; }
-  .stats { display: flex; gap: 20px; margin: 12px 0; flex-wrap: wrap; }
-  .stat { background: #161b22; padding: 10px 16px; border-radius: 6px; border: 1px solid #30363d; min-width: 120px; }
-  .stat .label { color: #8b949e; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
-  .stat .value { color: #58a6ff; font-size: 20px; font-weight: 600; }
-  .stat .delta { font-size: 11px; }
-  .delta.good { color: #3fb950; }
-  .delta.bad { color: #f85149; }
-  .charts { display: flex; gap: 15px; flex-wrap: wrap; margin: 15px 0; }
-  .chart-wrap { position: relative; }
-  canvas { background: #161b22; border-radius: 6px; border: 1px solid #30363d; }
-  #tooltip {
-    display: none; position: absolute; background: #1c2128; border: 1px solid #444c56;
-    border-radius: 6px; padding: 8px 10px; font-size: 10px; color: #c9d1d9;
-    pointer-events: none; z-index: 10; white-space: pre-line; max-width: 280px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  :root {
+    --bg: #f6f3ec;
+    --paper: rgba(255, 252, 247, 0.9);
+    --panel: rgba(255, 250, 242, 0.94);
+    --ink: #1d1a17;
+    --muted: #72685d;
+    --line: rgba(71, 56, 42, 0.14);
+    --accent: #0b7a75;
+    --accent-soft: rgba(11, 122, 117, 0.12);
+    --warm: #c35d2c;
+    --warm-soft: rgba(195, 93, 44, 0.12);
+    --good: #177245;
+    --bad: #b1442d;
+    --warn: #8a6414;
+    --shadow: 0 14px 40px rgba(40, 28, 18, 0.08);
+    --mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+    --sans: "IBM Plex Sans", "Avenir Next", "Segoe UI", sans-serif;
   }
-  #tooltip .tt-title { color: #58a6ff; font-weight: 600; font-size: 11px; margin-bottom: 3px; }
-  .legend { display: flex; gap: 15px; margin: 8px 0; font-size: 11px; }
-  .legend-item { display: flex; align-items: center; gap: 5px; }
-  .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
-  table { border-collapse: collapse; margin-top: 12px; font-size: 11px; width: 100%; }
-  th { background: #161b22; color: #8b949e; text-align: left; padding: 6px 8px; border-bottom: 1px solid #30363d; }
-  td { padding: 5px 8px; border-bottom: 1px solid #21262d; }
-  tr.keep td:nth-child(2) { color: #3fb950; }
-  tr.discard td:nth-child(2) { color: #8b949e; }
-  #status { color: #8b949e; font-size: 11px; margin-top: 8px; }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    color: var(--ink);
+    font-family: var(--sans);
+    background:
+      radial-gradient(circle at top left, rgba(11, 122, 117, 0.09), transparent 28%),
+      radial-gradient(circle at top right, rgba(195, 93, 44, 0.1), transparent 30%),
+      linear-gradient(180deg, #f7f0e5 0%, #f5f2ec 44%, #efe8db 100%);
+  }
+
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background-image:
+      linear-gradient(rgba(71, 56, 42, 0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(71, 56, 42, 0.04) 1px, transparent 1px);
+    background-size: 32px 32px;
+    opacity: 0.35;
+  }
+
+  .shell {
+    position: relative;
+    max-width: 1440px;
+    margin: 0 auto;
+    padding: 28px 20px 40px;
+  }
+
+  .hero {
+    display: flex;
+    justify-content: space-between;
+    gap: 20px;
+    align-items: end;
+    margin-bottom: 20px;
+  }
+
+  .hero-copy h1 {
+    margin: 0;
+    font-size: clamp(1.35rem, 3vw, 2.45rem);
+    line-height: 0.96;
+    letter-spacing: -0.06em;
+    text-transform: uppercase;
+  }
+
+  .hero-copy p {
+    max-width: 760px;
+    margin: 10px 0 0;
+    color: var(--muted);
+    font-size: 0.84rem;
+  }
+
+  .run-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 14px;
+  }
+
+  .run-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 11px;
+    border-radius: 999px;
+    border: 1px solid rgba(71, 56, 42, 0.12);
+    background: rgba(255, 255, 255, 0.7);
+    color: var(--ink);
+    text-decoration: none;
+    font: 600 0.68rem/1.1 var(--mono);
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+  }
+
+  .run-link:hover {
+    border-color: rgba(195, 93, 44, 0.34);
+    background: rgba(255, 247, 239, 0.95);
+  }
+
+  .run-link.active {
+    border-color: rgba(195, 93, 44, 0.38);
+    background: rgba(248, 234, 219, 0.95);
+    color: var(--warm);
+  }
+
+  .hero-tag {
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 10px 14px;
+    background: rgba(255, 255, 255, 0.55);
+    box-shadow: var(--shadow);
+    font: 600 0.68rem var(--mono);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--accent);
+  }
+
+  .grid {
+    display: grid;
+    gap: 16px;
+  }
+
+  .stats {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    margin-bottom: 16px;
+  }
+
+  .content {
+    grid-template-columns: minmax(0, 2fr) minmax(320px, 0.95fr);
+    align-items: start;
+  }
+
+  .detail-grid {
+    grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
+    margin-top: 16px;
+  }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 24px;
+    box-shadow: var(--shadow);
+    backdrop-filter: blur(12px);
+    overflow: hidden;
+  }
+
+  .panel-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: center;
+    padding: 18px 20px 12px;
+  }
+
+  .panel-head h2,
+  .panel-head h3 {
+    margin: 0;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--muted);
+  }
+
+  .panel-subtle {
+    font: 0.68rem var(--mono);
+    color: var(--muted);
+  }
+
+  .stat {
+    padding: 18px 18px 16px;
+    min-height: 126px;
+  }
+
+  .stat-label {
+    color: var(--muted);
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+  }
+
+  .stat-value {
+    margin-top: 12px;
+    font-size: clamp(1.05rem, 2.2vw, 1.7rem);
+    line-height: 1;
+    font-weight: 700;
+    letter-spacing: -0.04em;
+  }
+
+  .stat-meta {
+    margin-top: 10px;
+    color: var(--muted);
+    font-size: 0.74rem;
+  }
+
+  .delta.good { color: var(--good); }
+  .delta.bad { color: var(--bad); }
+  .delta.neutral { color: var(--muted); }
+  .run-good { color: var(--good); }
+  .run-bad { color: var(--bad); }
+  .run-warn { color: var(--warn); }
+
+  .metric-list,
+  .artifact-list {
+    padding: 0 20px 20px;
+    display: grid;
+    gap: 10px;
+  }
+
+  .metric-row,
+  .artifact-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: baseline;
+    border-bottom: 1px solid rgba(71, 56, 42, 0.08);
+    padding-bottom: 10px;
+  }
+
+  .metric-row:last-child,
+  .artifact-row:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+
+  .metric-row .label,
+  .artifact-row .label {
+    color: var(--muted);
+    font-size: 0.72rem;
+  }
+
+  .metric-row .value,
+  .artifact-row .value {
+    font-family: var(--mono);
+    font-size: 0.74rem;
+    text-align: right;
+  }
+
+  .chart-body {
+    padding: 0 14px 16px;
+  }
+
+  canvas {
+    display: block;
+    width: 100%;
+    height: 360px;
+    border-radius: 20px;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.58), rgba(255, 249, 239, 0.92));
+    border: 1px solid rgba(71, 56, 42, 0.1);
+  }
+
+  #progress {
+    height: 320px;
+  }
+
+  .status-stack {
+    padding: 0 20px 18px;
+  }
+
+  .stack-bar {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
+    gap: 6px;
+    margin-top: 8px;
+  }
+
+  .stack-segment {
+    min-height: 46px;
+    border-radius: 14px;
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    border: 1px solid rgba(71, 56, 42, 0.08);
+    font-size: 0.7rem;
+  }
+
+  .stack-segment.keep { background: rgba(23, 114, 69, 0.12); }
+  .stack-segment.improve { background: rgba(11, 122, 117, 0.12); }
+  .stack-segment.warn { background: rgba(138, 100, 20, 0.12); }
+  .stack-segment.fail { background: rgba(177, 68, 45, 0.12); }
+  .stack-segment .count {
+    font-size: 0.96rem;
+    font-weight: 700;
+  }
+
+  .log-body {
+    padding: 0 20px 20px;
+  }
+
+  pre {
+    margin: 0;
+    padding: 14px 16px;
+    border-radius: 18px;
+    background: #1e1a17;
+    color: #efe3d0;
+    font: 0.68rem/1.5 var(--mono);
+    min-height: 320px;
+    overflow: auto;
+    white-space: pre-wrap;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .table-wrap {
+    padding: 0 20px 20px;
+    overflow: auto;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 920px;
+  }
+
+  th, td {
+    padding: 12px 10px;
+    border-bottom: 1px solid rgba(71, 56, 42, 0.08);
+    text-align: left;
+    vertical-align: top;
+    font-size: 0.74rem;
+  }
+
+  th {
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 0.66rem;
+    position: sticky;
+    top: 0;
+    background: var(--panel);
+  }
+
+  td.code,
+  .code {
+    font-family: var(--mono);
+    font-size: 0.69rem;
+  }
+
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    border-radius: 999px;
+    padding: 5px 10px;
+    font: 600 0.64rem var(--mono);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border: 1px solid rgba(71, 56, 42, 0.1);
+  }
+
+  .pill-keep { background: rgba(23, 114, 69, 0.12); color: var(--good); }
+  .pill-discard { background: rgba(177, 68, 45, 0.1); color: var(--bad); }
+  .pill-other { background: rgba(114, 104, 93, 0.12); color: var(--muted); }
+
+  .footer-note {
+    margin-top: 14px;
+    color: var(--muted);
+    font-size: 0.72rem;
+  }
+
+  @media (max-width: 1180px) {
+    .stats,
+    .content,
+    .detail-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .hero {
+      flex-direction: column;
+      align-items: start;
+    }
+
+    .stack-bar {
+      grid-auto-flow: row;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 720px) {
+    .shell { padding: 18px 12px 24px; }
+    .stats { gap: 12px; }
+    .panel-head { padding: 16px 16px 10px; }
+    .metric-list,
+    .artifact-list,
+    .table-wrap,
+    .log-body,
+    .status-stack { padding-left: 16px; padding-right: 16px; }
+    .stack-bar { grid-template-columns: 1fr; }
+  }
 </style>
 </head>
 <body>
-<h1>AutoSilicon - FOC Pareto Dashboard</h1>
-<div class="stats">
-  <div class="stat"><div class="label">Sweep Points</div><div class="value" id="n-points">-</div></div>
-  <div class="stat"><div class="label">Experiments</div><div class="value" id="n-exp">-</div></div>
-  <div class="stat"><div class="label">Best Area (um2)</div><div class="value" id="best-area">-</div><div class="delta" id="area-delta"></div></div>
-  <div class="stat"><div class="label">Best fmax (MHz)</div><div class="value" id="best-fmax">-</div><div class="delta" id="fmax-delta"></div></div>
-  <div class="stat"><div class="label">Frontier</div><div class="value" id="n-frontier">-</div></div>
-</div>
-
-<div class="legend">
-  <div class="legend-item"><div class="legend-dot" style="background:#d2a8ff"></div>DW=12</div>
-  <div class="legend-item"><div class="legend-dot" style="background:#58a6ff"></div>DW=16</div>
-  <div class="legend-item"><div class="legend-dot" style="background:#3fb950"></div>DW=24</div>
-  <div class="legend-item"><div class="legend-dot" style="background:#f0883e;border-radius:0;width:8px;height:8px"></div>Baseline</div>
-  <div class="legend-item"><div class="legend-dot" style="background:#fff;border:2px solid #58a6ff;width:6px;height:6px"></div>Frontier</div>
-</div>
-
-<div class="charts">
-  <div class="chart-wrap">
-    <canvas id="pareto" width="900" height="500"></canvas>
-    <div id="tooltip"></div>
+<div class="shell">
+  <div class="hero">
+    <div class="hero-copy">
+      <h1>AutoSilicon FOC<br>Frontend Monitor</h1>
+      <p>Single-config, verified-only live view for the default FOC flow. This dashboard tracks experiment state, model provenance, frontier movement, and the current evidence package for the paper story.</p>
+      <div class="run-nav" id="run-nav"></div>
+    </div>
+    <div class="hero-tag" id="last-refresh">Refreshing...</div>
   </div>
-</div>
 
-<div class="charts">
-  <canvas id="timeline-area" width="600" height="280"></canvas>
-  <canvas id="timeline-fmax" width="600" height="280"></canvas>
-</div>
+  <div class="grid stats">
+    <section class="panel stat">
+      <div class="stat-label">Run State</div>
+      <div class="stat-value" id="run-state">-</div>
+      <div class="stat-meta code" id="run-phase">No live status yet</div>
+    </section>
+    <section class="panel stat">
+      <div class="stat-label">Model Provenance</div>
+      <div class="stat-value code" id="agent-model">-</div>
+      <div class="stat-meta code" id="agent-cli">-</div>
+    </section>
+    <section class="panel stat">
+      <div class="stat-label">Experiments</div>
+      <div class="stat-value" id="exp-count">-</div>
+      <div class="stat-meta" id="keep-rate">-</div>
+    </section>
+    <section class="panel stat">
+      <div class="stat-label">Best Verified Area</div>
+      <div class="stat-value" id="best-area">-</div>
+      <div class="stat-meta" id="area-delta">-</div>
+    </section>
+    <section class="panel stat">
+      <div class="stat-label">Best Verified Fmax</div>
+      <div class="stat-value" id="best-fmax">-</div>
+      <div class="stat-meta" id="fmax-delta">-</div>
+    </section>
+    <section class="panel stat">
+      <div class="stat-label">Verified Frontier</div>
+      <div class="stat-value" id="frontier-size">-</div>
+      <div class="stat-meta code" id="seed-commit">Seed -</div>
+    </section>
+  </div>
 
-<table id="results-table">
-  <thead><tr><th>#</th><th>Status</th><th>Area</th><th>fmax</th><th>Cells</th><th>Config</th><th>Description</th></tr></thead>
-  <tbody></tbody>
-</table>
-<div id="status">Loading...</div>
+  <div class="grid content">
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Verified Pareto Frontier</h2>
+        <div class="panel-subtle" id="pareto-subtle">Area vs period on the default configuration</div>
+      </div>
+      <div class="chart-body">
+        <canvas id="pareto"></canvas>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Run Metadata</h2>
+        <div class="panel-subtle code" id="run-id">run_id: -</div>
+      </div>
+      <div class="metric-list" id="run-metadata"></div>
+      <div class="panel-head">
+        <h3>Artifacts</h3>
+        <div class="panel-subtle">Paper-ready provenance</div>
+      </div>
+      <div class="artifact-list" id="artifact-list"></div>
+    </section>
+  </div>
+
+  <div class="grid detail-grid">
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Trajectory vs Seed</h2>
+        <div class="panel-subtle">Percent delta over kept experiments</div>
+      </div>
+      <div class="chart-body">
+        <canvas id="progress"></canvas>
+      </div>
+      <div class="status-stack">
+        <div class="panel-subtle">Status mix for this canonical experiment log</div>
+        <div class="stack-bar" id="status-stack"></div>
+        <div class="footer-note">`keep` rows form the reported frontier. Discarded rows remain visible here as search process evidence, but do not count as quantitative wins.</div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Live Log Tail</h2>
+        <div class="panel-subtle code" id="log-status">autosilicon.log</div>
+      </div>
+      <div class="log-body">
+        <pre id="log-tail">Loading...</pre>
+      </div>
+    </section>
+  </div>
+
+  <section class="panel" style="margin-top: 16px;">
+    <div class="panel-head">
+      <h2>Recent Experiments</h2>
+      <div class="panel-subtle">Newest rows first</div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Exp</th>
+            <th>Status</th>
+            <th>Area</th>
+            <th>Fmax</th>
+            <th>Area Delta</th>
+            <th>Fmax Delta</th>
+            <th>Commit</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody id="results-body"></tbody>
+      </table>
+    </div>
+  </section>
+</div>
 
 <script>
-const POLL_MS = 15000;
-const baseline = { area: 215164, fmax: 171.2 };
-const dpr = window.devicePixelRatio || 1;
-const fmaxToP = f => 1000.0 / f;
+const POLL_MS = 8000;
+const params = new URLSearchParams(window.location.search);
+const artifactsBase = (params.get("artifacts") || ".").replace(/\/+$/, "") || ".";
+const RUN_LINKS = [
+  { label: "Opus Lineage", artifacts: "." },
+  { label: "Codex Seed", artifacts: "runs/gpt54-seed-r1" },
+];
+const STATUS_ORDER = [
+  ["keep", "keep", "keep"],
+  ["discard_not_improving", "not improving", "improve"],
+  ["discard_hard_gate", "hard gate", "fail"],
+  ["discard_no_metrics", "no metrics", "warn"],
+  ["crash", "crash", "fail"],
+  ["no_changes", "no changes", "warn"],
+  ["scope_violation", "scope", "fail"],
+];
 
-const DW_COLORS = { 12: '#d2a8ff', 16: '#58a6ff', 24: '#3fb950', 32: '#f85149' };
-const DW_COLORS_DIM = { 12: 'rgba(210,168,255,0.25)', 16: 'rgba(88,166,255,0.25)', 24: 'rgba(63,185,80,0.25)', 32: 'rgba(248,81,73,0.25)' };
+function bust(url) {
+  return `${url}?t=${Date.now()}`;
+}
 
-let drawnPoints = [];
+function artifactPath(name) {
+  return artifactsBase === "." ? name : `${artifactsBase}/${name}`;
+}
 
-const _hiDpiDone = new Set();
-function hiDpiCanvas(canvas) {
-  const ctx = canvas.getContext('2d');
-  if (!_hiDpiDone.has(canvas)) {
-    const w = canvas.width, h = canvas.height;
-    canvas.style.width = w + 'px';
-    canvas.style.height = h + 'px';
-    canvas.width = w * dpr;
-    canvas.height = h * dpr;
-    ctx.scale(dpr, dpr);
-    _hiDpiDone.add(canvas);
-  }
-  const w = canvas.width / dpr, h = canvas.height / dpr;
-  ctx.clearRect(0, 0, w, h);
-  return ctx;
+function dashboardHref(artifacts) {
+  return artifacts === "." ? "dashboard.html" : `dashboard.html?artifacts=${encodeURIComponent(artifacts)}`;
+}
+
+function renderRunNav() {
+  const nav = document.getElementById("run-nav");
+  nav.innerHTML = RUN_LINKS.map((run) => {
+    const activeClass = run.artifacts === artifactsBase ? " active" : "";
+    return `<a class="run-link${activeClass}" href="${dashboardHref(run.artifacts)}">${run.label}</a>`;
+  }).join("");
 }
 
 async function fetchJSON(url) {
-  const r = await fetch(url + '?t=' + Date.now());
-  return r.json();
+  const response = await fetch(bust(url));
+  if (!response.ok) {
+    throw new Error(`${url}: ${response.status}`);
+  }
+  return response.json();
 }
 
-async function fetchTSV(url) {
-  const r = await fetch(url + '?t=' + Date.now());
-  const text = await r.text();
-  const lines = text.trim().split('\n');
-  if (lines.length < 2) return [];
-  const hdr = lines[0].split('\t');
-  return lines.slice(1).map(line => {
-    const vals = line.split('\t');
-    const obj = {};
-    hdr.forEach((h, i) => obj[h] = vals[i]);
-    return obj;
-  });
+async function fetchText(url) {
+  const response = await fetch(bust(url));
+  if (!response.ok) {
+    throw new Error(`${url}: ${response.status}`);
+  }
+  return response.text();
 }
 
-function drawPareto(canvas, sweepData, frontier) {
-  const ctx = hiDpiCanvas(canvas);
-  const W = canvas.width / dpr, H = canvas.height / dpr;
-  const pad = { t: 25, r: 30, b: 45, l: 70 };
-  drawnPoints = [];
-
-  if (!sweepData.length) return;
-
-  const allA = [...sweepData.map(p => p.area), baseline.area];
-  const allP = [...sweepData.map(p => p.period_ns), fmaxToP(baseline.fmax)];
-  const minA = Math.min(...allA) * 0.97, maxA = Math.max(...allA) * 1.03;
-  const minP = Math.min(...allP) * 0.97, maxP = Math.max(...allP) * 1.03;
-
-  const xS = a => pad.l + (a - minA) / (maxA - minA) * (W - pad.l - pad.r);
-  const yS = p => H - pad.b - (p - minP) / (maxP - minP) * (H - pad.t - pad.b);
-
-  // Grid
-  ctx.strokeStyle = '#21262d'; ctx.lineWidth = 0.5;
-  for (let i = 0; i <= 6; i++) {
-    const x = pad.l + i * (W - pad.l - pad.r) / 6;
-    ctx.beginPath(); ctx.moveTo(x, pad.t); ctx.lineTo(x, H - pad.b); ctx.stroke();
-    ctx.fillStyle = '#484f58'; ctx.font = '9px -apple-system, sans-serif'; ctx.textAlign = 'center';
-    ctx.fillText(Math.round(minA + i * (maxA - minA) / 6).toLocaleString(), x, H - pad.b + 14);
-    const y = pad.t + i * (H - pad.t - pad.b) / 6;
-    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W - pad.r, y); ctx.stroke();
-    ctx.textAlign = 'right';
-    ctx.fillText((maxP - i * (maxP - minP) / 6).toFixed(2), pad.l - 6, y + 3);
-  }
-
-  // Axis labels
-  ctx.fillStyle = '#8b949e'; ctx.font = '10px -apple-system, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText('Area (um2)', W / 2, H - 5);
-  ctx.save(); ctx.translate(14, H / 2); ctx.rotate(-Math.PI / 2);
-  ctx.fillText('Period (ns)', 0, 0); ctx.restore();
-
-  ctx.fillStyle = '#3fb950'; ctx.font = '9px -apple-system, sans-serif'; ctx.textAlign = 'left';
-  ctx.fillText('better', pad.l + 2, H - pad.b - 4);
-
-  // All sweep points colored by DATA_W
-  sweepData.forEach(p => {
-    const x = xS(p.area), y = yS(p.period_ns);
-    const dw = p.DATA_W || 16;
-    ctx.fillStyle = DW_COLORS_DIM[dw] || DW_COLORS_DIM[16];
-    ctx.beginPath(); ctx.arc(x, y, 2, 0, Math.PI * 2); ctx.fill();
-  });
-
-  // Baseline
-  const bx = xS(baseline.area), by = yS(fmaxToP(baseline.fmax));
-  ctx.fillStyle = '#f0883e';
-  ctx.beginPath(); ctx.arc(bx, by, 5, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#f0883e'; ctx.font = '10px -apple-system, sans-serif'; ctx.textAlign = 'left';
-  ctx.fillText('baseline', bx + 8, by + 4);
-
-  // Frontier line
-  const fSorted = [...frontier].sort((a, b) => a.area - b.area);
-  if (fSorted.length > 1) {
-    ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 1.5; ctx.setLineDash([4, 3]);
-    ctx.beginPath();
-    ctx.moveTo(xS(fSorted[0].area), yS(fmaxToP(fSorted[0].estimated_fmax_mhz)));
-    fSorted.forEach(p => ctx.lineTo(xS(p.area), yS(fmaxToP(p.estimated_fmax_mhz))));
-    ctx.stroke(); ctx.setLineDash([]);
-  }
-
-  // Frontier points
-  fSorted.forEach(fp => {
-    const x = xS(fp.area), y = yS(fmaxToP(fp.estimated_fmax_mhz));
-    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI * 2); ctx.stroke();
-    ctx.fillStyle = '#58a6ff';
-    ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fill();
-
-    const match = sweepData.find(p => Math.abs(p.area - fp.area) < 1);
-    drawnPoints.push({
-      x, y, radius: 8, frontier: true,
-      area: fp.area, fmax: fp.estimated_fmax_mhz,
-      period: fmaxToP(fp.estimated_fmax_mhz),
-      exp: match ? match.experiment_id : '?',
-      commit: match ? match.commit : '',
-      config: match ? match.config_id : '',
-      dw: match ? match.DATA_W : '',
-      ci: match ? match.CORDIC_ITERS : '',
-    });
-  });
-}
-
-// Tooltip
-const paretoCanvas = document.getElementById('pareto');
-const tooltip = document.getElementById('tooltip');
-paretoCanvas.addEventListener('mousemove', e => {
-  const rect = paretoCanvas.getBoundingClientRect();
-  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
-  let hit = null;
-  for (const pt of drawnPoints) {
-    if (!pt.frontier) continue;
-    const dx = mx - pt.x, dy = my - pt.y;
-    if (dx*dx + dy*dy < pt.radius*pt.radius) { hit = pt; break; }
-  }
-  if (hit) {
-    tooltip.style.display = 'block';
-    tooltip.style.left = (hit.x + 12) + 'px';
-    tooltip.style.top = (hit.y - 10) + 'px';
-    tooltip.innerHTML =
-      '<div class="tt-title">Exp ' + hit.exp + ' / Config ' + hit.config + '</div>' +
-      'Area: ' + Math.round(hit.area).toLocaleString() + ' um2\n' +
-      'fmax: ' + hit.fmax.toFixed(1) + ' MHz (' + hit.period.toFixed(2) + ' ns)\n' +
-      'Commit: ' + hit.commit + '\n' +
-      'DW=' + hit.dw + ' CI=' + hit.ci;
-  } else {
-    tooltip.style.display = 'none';
-  }
-});
-paretoCanvas.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
-
-function drawTimeline(canvas, rows, metric, label) {
-  const ctx = hiDpiCanvas(canvas);
-  const W = canvas.width / dpr, H = canvas.height / dpr;
-  const pad = { t: 20, r: 25, b: 40, l: 65 };
-
-  // Only default config kept experiments
-  const kept = rows.filter(r => r.status === 'keep' && r[metric] &&
-    (!r.config_id || r.config_id === '32'));
-  if (!kept.length) return;
-
-  const baseVal = metric === 'area' ? baseline.area : baseline.fmax;
-  const vals = [baseVal, ...kept.map(r => +r[metric])];
-  const labels = ['base', ...kept.map(r => r.experiment_id)];
-  const minV = Math.min(...vals) * 0.995, maxV = Math.max(...vals) * 1.005;
-
-  const xS = i => pad.l + (vals.length > 1 ? i / (vals.length - 1) : 0.5) * (W - pad.l - pad.r);
-  const yS = v => H - pad.b - (v - minV) / (maxV - minV) * (H - pad.t - pad.b);
-
-  ctx.strokeStyle = '#21262d'; ctx.lineWidth = 0.5;
-  for (let i = 0; i <= 4; i++) {
-    const y = pad.t + i * (H - pad.t - pad.b) / 4;
-    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W - pad.r, y); ctx.stroke();
-    ctx.fillStyle = '#484f58'; ctx.font = '9px -apple-system, sans-serif'; ctx.textAlign = 'right';
-    const v = maxV - i * (maxV - minV) / 4;
-    ctx.fillText(metric === 'area' ? Math.round(v).toLocaleString() : v.toFixed(1), pad.l - 6, y + 3);
-  }
-
-  ctx.fillStyle = '#8b949e'; ctx.font = '10px -apple-system, sans-serif'; ctx.textAlign = 'center';
-  ctx.fillText(label + ' (DW=16, default config)', W / 2, H - 5);
-
-  const color = metric === 'area' ? '#3fb950' : '#58a6ff';
-  ctx.strokeStyle = color; ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  vals.forEach((v, i) => { i === 0 ? ctx.moveTo(xS(i), yS(v)) : ctx.lineTo(xS(i), yS(v)); });
-  ctx.stroke();
-
-  ctx.fillStyle = color.replace(')', ',0.08)').replace('rgb', 'rgba');
-  ctx.beginPath();
-  ctx.moveTo(xS(0), yS(vals[0]));
-  vals.forEach((v, i) => ctx.lineTo(xS(i), yS(v)));
-  ctx.lineTo(xS(vals.length - 1), H - pad.b);
-  ctx.lineTo(xS(0), H - pad.b);
-  ctx.closePath(); ctx.fill();
-
-  vals.forEach((v, i) => {
-    ctx.fillStyle = i === 0 ? '#f0883e' : color;
-    ctx.beginPath(); ctx.arc(xS(i), yS(v), 2.5, 0, Math.PI * 2); ctx.fill();
-  });
-}
-
-function updateTable(rows) {
-  const tbody = document.querySelector('#results-table tbody');
-  tbody.innerHTML = '';
-  const kept = rows.filter(r => r.status === 'keep');
-  [...kept].reverse().slice(0, 30).forEach(r => {
-    const tr = document.createElement('tr');
-    tr.className = 'keep';
-    const area = r.area ? Number(+r.area).toLocaleString(undefined, {maximumFractionDigits: 0}) : '-';
-    const fmax = r.estimated_fmax_mhz ? (+r.estimated_fmax_mhz).toFixed(1) : '-';
-    const cells = r.cell_count || '-';
-    const cfg = r.config_id || '-';
-    const desc = r.description || '';
-    tr.innerHTML = '<td>' + r.experiment_id + '</td><td>keep</td><td>' + area + '</td><td>' + fmax + '</td><td>' + cells + '</td><td>' + cfg + '</td><td>' + desc + '</td>';
-    tbody.appendChild(tr);
-  });
-}
-
-function updateStats(sweepData, frontier) {
-  const exps = new Set(sweepData.map(p => p.experiment_id));
-  document.getElementById('n-points').textContent = sweepData.length;
-  document.getElementById('n-exp').textContent = exps.size;
-  document.getElementById('n-frontier').textContent = frontier.length;
-
-  if (frontier.length) {
-    const bestArea = Math.min(...frontier.map(f => f.area));
-    const bestFmax = Math.max(...frontier.map(f => f.estimated_fmax_mhz));
-    document.getElementById('best-area').textContent = Math.round(bestArea).toLocaleString();
-    document.getElementById('best-fmax').textContent = bestFmax.toFixed(1);
-
-    const ad = ((bestArea - baseline.area) / baseline.area * 100).toFixed(1);
-    const el = document.getElementById('area-delta');
-    el.textContent = ad + '% vs baseline';
-    el.className = 'delta ' + (+ad < 0 ? 'good' : 'bad');
-
-    const fd = ((bestFmax - baseline.fmax) / baseline.fmax * 100).toFixed(1);
-    const el2 = document.getElementById('fmax-delta');
-    el2.textContent = (+fd >= 0 ? '+' : '') + fd + '% vs baseline';
-    el2.className = 'delta ' + (+fd > 0 ? 'good' : 'bad');
-  }
-}
-
-async function poll() {
+async function fetchOptionalJSON(url) {
   try {
-    const [sweepData, frontier, rows] = await Promise.all([
-      fetchJSON('all_sweeps.json'),
-      fetchJSON('pareto_frontier.json'),
-      fetchTSV('results.tsv'),
-    ]);
-    // Only show tested configs (DW=16, CI>=12 — verified passing)
-    const testedData = sweepData.filter(p => p.DATA_W === 16 && p.CORDIC_ITERS >= 12);
-    const testedFrontier = frontier.filter(f => {
-      return testedData.some(p => Math.abs(p.area - f.area) < 1);
-    });
-    updateStats(testedData, testedFrontier.length ? testedFrontier : frontier);
-    drawPareto(document.getElementById('pareto'), testedData, testedFrontier.length ? testedFrontier : frontier);
-    drawTimeline(document.getElementById('timeline-area'), rows, 'area', 'Area (um2)');
-    drawTimeline(document.getElementById('timeline-fmax'), rows, 'estimated_fmax_mhz', 'fmax (MHz)');
-    updateTable(rows);
-    document.getElementById('status').textContent = sweepData.length + ' sweep points | Updated ' + new Date().toLocaleTimeString();
-  } catch (e) {
-    document.getElementById('status').textContent = 'Error: ' + e.message;
+    return await fetchJSON(url);
+  } catch (_err) {
+    return null;
   }
 }
 
-poll();
-setInterval(poll, POLL_MS);
+async function fetchOptionalText(url) {
+  try {
+    return await fetchText(url);
+  } catch (_err) {
+    return "";
+  }
+}
+
+function parseTSV(text) {
+  const trimmed = text.trim();
+  if (!trimmed) return [];
+  const lines = trimmed.split("\n");
+  if (lines.length < 2) return [];
+  const headers = lines[0].split("\t");
+  return lines.slice(1).map((line) => {
+    const cols = line.split("\t");
+    const row = {};
+    headers.forEach((header, idx) => {
+      row[header] = cols[idx] ?? "";
+    });
+    return row;
+  });
+}
+
+function numberOrNull(value) {
+  if (value === "" || value == null) return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function percentDelta(current, baseline, invert = false) {
+  if (current == null || baseline == null || baseline === 0) return null;
+  const raw = ((current - baseline) / baseline) * 100;
+  return invert ? -raw : raw;
+}
+
+function fmtNumber(value, digits = 0) {
+  if (value == null || !Number.isFinite(value)) return "-";
+  return value.toLocaleString(undefined, {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  });
+}
+
+function fmtDelta(value, betterWhenPositive = true) {
+  if (value == null || !Number.isFinite(value)) {
+    return { text: "-", cls: "neutral" };
+  }
+  const sign = value > 0 ? "+" : "";
+  const cls = value === 0 ? "neutral" : ((value > 0) === betterWhenPositive ? "good" : "bad");
+  return { text: `${sign}${value.toFixed(2)}% vs seed`, cls };
+}
+
+function fmaxToPeriodNs(fmax) {
+  if (fmax == null || !Number.isFinite(fmax) || fmax <= 0) return null;
+  return 1000 / fmax;
+}
+
+function latestRows(rows, limit = 14) {
+  return [...rows]
+    .sort((a, b) => Number(b.experiment_id) - Number(a.experiment_id))
+    .slice(0, limit);
+}
+
+function canonicalRows(rows) {
+  return rows.map((row) => ({
+    ...row,
+    experiment_id: numberOrNull(row.experiment_id),
+    area: numberOrNull(row.area),
+    estimated_fmax_mhz: numberOrNull(row.estimated_fmax_mhz),
+    cell_count: numberOrNull(row.cell_count),
+    tests_passed: row.tests_passed === "True",
+    lint_passed: row.lint_passed === "True",
+    synth_time_s: numberOrNull(row.synth_time_s),
+  }));
+}
+
+function keptRows(rows) {
+  return rows
+    .filter((row) => row.status === "keep" && row.area != null && row.estimated_fmax_mhz != null)
+    .sort((a, b) => a.experiment_id - b.experiment_id);
+}
+
+function bestBy(rows, key, comparator) {
+  return rows.reduce((best, row) => {
+    if (!best) return row;
+    return comparator(row[key], best[key]) ? row : best;
+  }, null);
+}
+
+function statusClass(state) {
+  if (!state) return "run-warn";
+  if (["completed", "dry_run_complete", "kept", "keep"].includes(state)) return "run-good";
+  if (["running", "starting", "invoking_agent", "evaluating", "committing"].includes(state)) return "run-warn";
+  if (["crash", "agent_failed"].includes(state)) return "run-bad";
+  return "run-warn";
+}
+
+function pillClass(status) {
+  if (status === "keep") return "pill-keep";
+  if (status.startsWith("discard") || status === "crash" || status === "scope_violation") return "pill-discard";
+  return "pill-other";
+}
+
+function drawResponsive(canvas, height, painter) {
+  const dpr = window.devicePixelRatio || 1;
+  const width = Math.max(canvas.clientWidth || canvas.parentElement.clientWidth, 320);
+  canvas.width = Math.floor(width * dpr);
+  canvas.height = Math.floor(height * dpr);
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, width, height);
+  painter(ctx, width, height);
+}
+
+function drawPareto(canvas, rows, frontier, baseline) {
+  drawResponsive(canvas, 360, (ctx, W, H) => {
+    const margin = { t: 24, r: 24, b: 54, l: 72 };
+    const plotW = W - margin.l - margin.r;
+    const plotH = H - margin.t - margin.b;
+    const points = rows
+      .filter((row) => row.area != null && row.estimated_fmax_mhz != null)
+      .map((row) => ({
+        ...row,
+        period_ns: fmaxToPeriodNs(row.estimated_fmax_mhz),
+      }))
+      .filter((row) => row.period_ns != null);
+    if (!points.length) return;
+
+    const xs = points.map((row) => row.area);
+    const ys = points.map((row) => row.period_ns);
+    if (baseline?.metrics?.area != null) xs.push(baseline.metrics.area);
+    if (baseline?.metrics?.estimated_fmax_mhz != null) ys.push(fmaxToPeriodNs(baseline.metrics.estimated_fmax_mhz));
+
+    const minX = Math.min(...xs) * 0.97;
+    const maxX = Math.max(...xs) * 1.03;
+    const minY = Math.min(...ys) * 0.96;
+    const maxY = Math.max(...ys) * 1.04;
+
+    const xScale = (value) => margin.l + ((value - minX) / (maxX - minX || 1)) * plotW;
+    const yScale = (value) => margin.t + plotH - ((value - minY) / (maxY - minY || 1)) * plotH;
+
+    ctx.strokeStyle = "rgba(71, 56, 42, 0.12)";
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= 5; i++) {
+      const x = margin.l + (plotW * i) / 5;
+      const y = margin.t + (plotH * i) / 5;
+      ctx.beginPath();
+      ctx.moveTo(x, margin.t);
+      ctx.lineTo(x, margin.t + plotH);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(margin.l, y);
+      ctx.lineTo(margin.l + plotW, y);
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = "#72685d";
+    ctx.font = '11px "IBM Plex Mono", monospace';
+    ctx.textAlign = "center";
+    for (let i = 0; i <= 5; i++) {
+      const value = minX + ((maxX - minX) * i) / 5;
+      ctx.fillText(fmtNumber(value, 0), margin.l + (plotW * i) / 5, H - 20);
+    }
+    ctx.textAlign = "right";
+    for (let i = 0; i <= 5; i++) {
+      const plotted = maxY - ((maxY - minY) * i) / 5;
+      ctx.fillText(fmtNumber(plotted, 2), margin.l - 10, margin.t + (plotH * i) / 5 + 4);
+    }
+
+    ctx.save();
+    ctx.translate(18, H / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.fillText("Critical Path Period (ns)", 0, 0);
+    ctx.restore();
+    ctx.textAlign = "center";
+    ctx.fillText("Area (um^2)", W / 2, H - 4);
+
+    points.forEach((row) => {
+      ctx.beginPath();
+      ctx.fillStyle = row.status === "keep" ? "rgba(11, 122, 117, 0.85)" : "rgba(114, 104, 93, 0.25)";
+      ctx.arc(xScale(row.area), yScale(row.period_ns), row.status === "keep" ? 4.5 : 3.2, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    if (baseline?.metrics?.area != null && baseline?.metrics?.estimated_fmax_mhz != null) {
+      const bx = xScale(baseline.metrics.area);
+      const by = yScale(fmaxToPeriodNs(baseline.metrics.estimated_fmax_mhz));
+      ctx.fillStyle = "#c35d2c";
+      ctx.fillRect(bx - 5, by - 5, 10, 10);
+      ctx.font = '12px "IBM Plex Mono", monospace';
+      ctx.textAlign = "left";
+      ctx.fillText("seed", bx + 10, by + 4);
+    }
+
+    const frontierPoints = [...frontier]
+      .map((row) => ({
+        ...row,
+        period_ns: fmaxToPeriodNs(row.estimated_fmax_mhz),
+      }))
+      .filter((row) => row.area != null && row.period_ns != null)
+      .sort((a, b) => a.area - b.area);
+
+    if (frontierPoints.length) {
+      ctx.strokeStyle = "#1d1a17";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([8, 6]);
+      ctx.beginPath();
+      frontierPoints.forEach((row, idx) => {
+        const x = xScale(row.area);
+        const y = yScale(row.period_ns);
+        if (idx === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      frontierPoints.forEach((row) => {
+        const x = xScale(row.area);
+        const y = yScale(row.period_ns);
+        ctx.fillStyle = "#fff8f0";
+        ctx.strokeStyle = "#0b7a75";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(x, y, 7, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      });
+    }
+
+    ctx.fillStyle = "#177245";
+    ctx.font = '11px "IBM Plex Mono", monospace';
+    ctx.textAlign = "left";
+    ctx.fillText("better", margin.l + 6, H - 18);
+  });
+}
+
+function drawProgress(canvas, keepRows, baseline) {
+  drawResponsive(canvas, 320, (ctx, W, H) => {
+    const margin = { t: 24, r: 22, b: 44, l: 66 };
+    const plotW = W - margin.l - margin.r;
+    const plotH = H - margin.t - margin.b;
+    if (!keepRows.length || !baseline?.metrics) return;
+
+    const series = keepRows.map((row) => ({
+      experiment_id: row.experiment_id,
+      area_delta: percentDelta(row.area, baseline.metrics.area, true),
+      fmax_delta: percentDelta(row.estimated_fmax_mhz, baseline.metrics.estimated_fmax_mhz, false),
+    })).filter((row) => row.area_delta != null && row.fmax_delta != null);
+
+    if (!series.length) return;
+
+    const ys = series.flatMap((row) => [row.area_delta, row.fmax_delta, 0]);
+    const minY = Math.min(...ys) - 1;
+    const maxY = Math.max(...ys) + 1;
+    const minX = series[0].experiment_id;
+    const maxX = series[series.length - 1].experiment_id;
+
+    const xScale = (value) => margin.l + ((value - minX) / (maxX - minX || 1)) * plotW;
+    const yScale = (value) => margin.t + plotH - ((value - minY) / (maxY - minY || 1)) * plotH;
+
+    ctx.strokeStyle = "rgba(71, 56, 42, 0.12)";
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= 4; i++) {
+      const y = margin.t + (plotH * i) / 4;
+      ctx.beginPath();
+      ctx.moveTo(margin.l, y);
+      ctx.lineTo(margin.l + plotW, y);
+      ctx.stroke();
+    }
+
+    ctx.strokeStyle = "rgba(71, 56, 42, 0.2)";
+    ctx.beginPath();
+    ctx.moveTo(margin.l, yScale(0));
+    ctx.lineTo(margin.l + plotW, yScale(0));
+    ctx.stroke();
+
+    ctx.fillStyle = "#72685d";
+    ctx.font = '11px "IBM Plex Mono", monospace';
+    ctx.textAlign = "right";
+    for (let i = 0; i <= 4; i++) {
+      const value = maxY - ((maxY - minY) * i) / 4;
+      ctx.fillText(`${value.toFixed(1)}%`, margin.l - 10, margin.t + (plotH * i) / 4 + 4);
+    }
+
+    ctx.textAlign = "center";
+    series.forEach((row) => {
+      ctx.fillText(String(row.experiment_id), xScale(row.experiment_id), H - 14);
+    });
+
+    const paintSeries = (key, color) => {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      series.forEach((row, idx) => {
+        const x = xScale(row.experiment_id);
+        const y = yScale(row[key]);
+        if (idx === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+
+      ctx.fillStyle = color;
+      series.forEach((row) => {
+        ctx.beginPath();
+        ctx.arc(xScale(row.experiment_id), yScale(row[key]), 4, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    };
+
+    paintSeries("area_delta", "#0b7a75");
+    paintSeries("fmax_delta", "#c35d2c");
+
+    ctx.fillStyle = "#0b7a75";
+    ctx.fillRect(W - 180, 20, 14, 3);
+    ctx.fillStyle = "#1d1a17";
+    ctx.textAlign = "left";
+    ctx.fillText("area improvement", W - 158, 24);
+
+    ctx.fillStyle = "#c35d2c";
+    ctx.fillRect(W - 180, 40, 14, 3);
+    ctx.fillStyle = "#1d1a17";
+    ctx.fillText("fmax improvement", W - 158, 44);
+  });
+}
+
+function renderRunMetadata(status, baseline, rows, frontier) {
+  const metadata = [
+    ["State", status?.state ?? "idle"],
+    ["Phase", status?.phase ?? "no active run"],
+    ["Current experiment", status?.current_experiment ?? "-"],
+    ["Last completed", status?.last_completed_experiment ?? (rows.length ? rows[rows.length - 1].experiment_id : "-")],
+    ["Git head", status?.head_commit ?? "-"],
+    ["Git dirty", status?.git_dirty == null ? "-" : (status.git_dirty ? "true" : "false")],
+    ["Timeout per eval", status?.timeout_per_run ?? "-"],
+    ["Timeout per agent", status?.agent_timeout ?? "-"],
+    ["Seed commit", baseline?.commit ?? "-"],
+    ["Seed area", baseline?.metrics?.area != null ? fmtNumber(baseline.metrics.area, 1) : "-"],
+    ["Seed fmax", baseline?.metrics?.estimated_fmax_mhz != null ? fmtNumber(baseline.metrics.estimated_fmax_mhz, 2) : "-"],
+  ];
+
+  document.getElementById("run-metadata").innerHTML = metadata.map(([label, value]) => `
+      <div class="metric-row">
+        <div class="label">${label}</div>
+        <div class="value">${value}</div>
+    </div>
+  `).join("");
+
+  const artifacts = [
+    ["results.tsv rows", String(rows.length)],
+    ["frontier points", String(frontier.length)],
+    ["artifact base", artifactsBase],
+    ["status file", status ? "present" : "missing"],
+    ["prompt file", status?.prompt_file ? "present" : "unknown"],
+    ["log file", status?.log_file ? "present" : "expected"],
+    ["run updated", status?.updated_at ?? "-"],
+  ];
+  document.getElementById("artifact-list").innerHTML = artifacts.map(([label, value]) => `
+    <div class="artifact-row">
+      <div class="label">${label}</div>
+      <div class="value">${value}</div>
+    </div>
+  `).join("");
+}
+
+function renderStatusStack(rows) {
+  const counts = new Map();
+  rows.forEach((row) => counts.set(row.status, (counts.get(row.status) || 0) + 1));
+
+  document.getElementById("status-stack").innerHTML = STATUS_ORDER
+    .map(([status, label, cls]) => `
+      <div class="stack-segment ${cls}">
+        <div>${label}</div>
+        <div class="count">${counts.get(status) || 0}</div>
+      </div>
+    `)
+    .join("");
+}
+
+function renderResultsTable(rows, baseline) {
+  const body = latestRows(rows, 18).map((row) => {
+    const areaDelta = percentDelta(row.area, baseline?.metrics?.area, true);
+    const fmaxDelta = percentDelta(row.estimated_fmax_mhz, baseline?.metrics?.estimated_fmax_mhz, false);
+    return `
+      <tr>
+        <td class="code">${row.experiment_id ?? "-"}</td>
+        <td><span class="status-pill ${pillClass(row.status)}">${row.status}</span></td>
+        <td class="code">${fmtNumber(row.area, 1)}</td>
+        <td class="code">${fmtNumber(row.estimated_fmax_mhz, 2)}</td>
+        <td class="${fmtDelta(areaDelta, true).cls}">${fmtDelta(areaDelta, true).text}</td>
+        <td class="${fmtDelta(fmaxDelta, true).cls}">${fmtDelta(fmaxDelta, true).text}</td>
+        <td class="code">${row.commit || "-"}</td>
+        <td>${row.description || "-"}</td>
+      </tr>
+    `;
+  }).join("");
+
+  document.getElementById("results-body").innerHTML = body || `
+    <tr><td colspan="8">No results yet.</td></tr>
+  `;
+}
+
+function renderLogTail(text) {
+  const lines = text.trim().split("\n").filter(Boolean);
+  const tail = lines.slice(-22).join("\n");
+  document.getElementById("log-tail").textContent = tail || "No log output yet.";
+  document.getElementById("log-status").textContent = lines.length ? `autosilicon.log (${lines.length} lines)` : "autosilicon.log missing";
+}
+
+function renderSummary(status, rows, frontier, baseline) {
+  const keep = keptRows(rows);
+  const bestAreaRow = bestBy(keep, "area", (a, b) => a < b);
+  const bestFmaxRow = bestBy(keep, "estimated_fmax_mhz", (a, b) => a > b);
+  const keepCount = rows.filter((row) => row.status === "keep").length;
+  const keepRate = rows.length ? (100 * keepCount / rows.length) : null;
+
+  const stateEl = document.getElementById("run-state");
+  const phaseEl = document.getElementById("run-phase");
+  stateEl.textContent = status?.state ?? "idle";
+  stateEl.className = `stat-value ${statusClass(status?.state)}`;
+  phaseEl.textContent = status?.phase ? `phase: ${status.phase}` : "No live status yet";
+
+  document.getElementById("agent-model").textContent = status?.agent_model ?? "unknown";
+  document.getElementById("agent-cli").textContent = `CLI: ${status?.agent_cli ?? "unknown"}`;
+  document.getElementById("exp-count").textContent = String(rows.length);
+  document.getElementById("keep-rate").textContent = keepRate == null ? "-" : `${keepCount} keep / ${rows.length - keepCount} non-keep (${keepRate.toFixed(1)}%)`;
+  document.getElementById("frontier-size").textContent = String(frontier.length);
+  document.getElementById("seed-commit").textContent = `Seed ${baseline?.commit ?? "-"}`;
+  document.getElementById("run-id").textContent = `run_id: ${status?.run_id ?? "-"}`;
+  document.getElementById("pareto-subtle").textContent = artifactsBase === "."
+    ? "Area vs period on the default configuration"
+    : `Area vs period from ${artifactsBase}`;
+  document.getElementById("last-refresh").textContent = `Refreshed ${new Date().toLocaleTimeString()}`;
+
+  const areaDelta = percentDelta(bestAreaRow?.area, baseline?.metrics?.area, true);
+  const fmaxDelta = percentDelta(bestFmaxRow?.estimated_fmax_mhz, baseline?.metrics?.estimated_fmax_mhz, false);
+  document.getElementById("best-area").textContent = bestAreaRow ? fmtNumber(bestAreaRow.area, 1) : "-";
+  document.getElementById("best-fmax").textContent = bestFmaxRow ? fmtNumber(bestFmaxRow.estimated_fmax_mhz, 2) : "-";
+  const areaDeltaFmt = fmtDelta(areaDelta, true);
+  const fmaxDeltaFmt = fmtDelta(fmaxDelta, true);
+  document.getElementById("area-delta").textContent = areaDeltaFmt.text;
+  document.getElementById("area-delta").className = `stat-meta delta ${areaDeltaFmt.cls}`;
+  document.getElementById("fmax-delta").textContent = fmaxDeltaFmt.text;
+  document.getElementById("fmax-delta").className = `stat-meta delta ${fmaxDeltaFmt.cls}`;
+
+  renderRunMetadata(status, baseline, rows, frontier);
+  renderStatusStack(rows);
+  renderResultsTable(rows, baseline);
+}
+
+async function refresh() {
+  try {
+    renderRunNav();
+    const [resultsText, frontierData, baseline, status, logText] = await Promise.all([
+      fetchText(artifactPath("results.tsv")),
+      fetchOptionalJSON(artifactPath("pareto_frontier.json")),
+      fetchOptionalJSON("baseline_metrics.json"),
+      fetchOptionalJSON(artifactPath("autosilicon_status.json")),
+      fetchOptionalText(artifactPath("autosilicon.log")),
+    ]);
+
+    const rows = canonicalRows(parseTSV(resultsText));
+    const frontier = (frontierData || []).map((row) => ({
+      area: numberOrNull(row.area),
+      estimated_fmax_mhz: numberOrNull(row.estimated_fmax_mhz),
+    }));
+
+    renderSummary(status, rows, frontier, baseline);
+    drawPareto(document.getElementById("pareto"), rows, frontier, baseline);
+    drawProgress(document.getElementById("progress"), keptRows(rows), baseline);
+    renderLogTail(logText);
+  } catch (err) {
+    document.getElementById("log-tail").textContent = `Dashboard refresh failed:\n${err}`;
+    document.getElementById("last-refresh").textContent = "Refresh failed";
+  }
+}
+
+window.addEventListener("resize", () => refresh());
+refresh();
+setInterval(refresh, POLL_MS);
 </script>
 </body>
 </html>

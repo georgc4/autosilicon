@@ -6,33 +6,77 @@ LLM-in-the-loop hardware design optimization, inspired by
 An autonomous agent iteratively modifies RTL or PnR configuration,
 evaluates via synthesis/PnR, and keeps improvements while discarding
 regressions. The agent never stops — it loops until interrupted or
-a maximum experiment count is reached.
+a per-launch experiment budget is reached.
 
 ## Quick start
 
 ```bash
-# Frontend optimization (RTL → synthesis)
-python -m autosilicon.harness.autosilicon \
+# Frontend optimization (RTL → synthesis, default config only)
+python harness/autosilicon.py \
     --mode fe \
     --design-dir ~/laplace-accelerator
 
+# Frontend optimization with Codex CLI + GPT-5.4
+python harness/autosilicon.py \
+    --mode fe \
+    --design-dir ~/laplace-accelerator \
+    --agent-cli codex \
+    --agent-model gpt-5.4
+
 # Backend optimization (PnR configuration)
-python -m autosilicon.harness.autosilicon \
+python harness/autosilicon.py \
     --mode be \
     --design-dir ~/laplace-accelerator
 
 # With limits
-python -m autosilicon.harness.autosilicon \
+python harness/autosilicon.py \
+    --mode fe \
+    --design-dir ~/laplace-accelerator \
+    --max-experiments 1 \
+    --agent-model claude-opus-4-6
+
+# Zero-cost wiring check
+python harness/autosilicon.py \
+    --mode fe \
+    --design-dir ~/laplace-accelerator \
+    --agent-cli codex \
+    --agent-model gpt-5.4 \
+    --max-experiments 1 \
+    --dry-run
+
+# Keep a run's artifacts in a namespaced subdirectory
+python harness/autosilicon.py \
+    --mode fe \
+    --design-dir ~/autosilicon/designs/foc \
+    --agent-cli codex \
+    --agent-model gpt-5.4 \
+    --artifacts-dir runs/gpt54-seed-r1 \
+    --max-experiments 1
+
+# One-command seeded Codex launcher for FOC
+python scripts/launch_agent_run.py \
+    --design-dir designs/foc \
+    --agent-cli codex \
+    --agent-model gpt-5.4 \
+    --run-name gpt54-seed-r1 \
+    --max-experiments 1
+
+# With longer budgets
+python harness/autosilicon.py \
     --mode fe \
     --design-dir ~/laplace-accelerator \
     --max-experiments 50 \
+    --agent-timeout 1200 \
     --timeout-per-run 3600
 ```
 
 ## Prerequisites
 
 - **Python 3.11+**
-- **Claude Code CLI** (`claude`) on PATH
+- **One supported agent CLI** on PATH:
+  - **Claude Code CLI** (`claude`)
+  - **Codex CLI** (`codex`)
+  - On macOS, the harness will also auto-detect the bundled Codex binary at `/Applications/Codex.app/Contents/Resources/codex`
 - **Git** — the design directory must be a git repository
 - **Frontend mode:** `yosys`, `verilator`, `cocotb` (for `make lint`, `make test`, `make synth-one`)
 - **Backend mode:** OpenLane2 / Nix (for `make pnr`)
@@ -44,7 +88,7 @@ python -m autosilicon.harness.autosilicon \
 │                    EXPERIMENT LOOP                       │
 │                                                         │
 │  1. Build prompt (program.md + history + frontier)       │
-│  2. Invoke Claude Code CLI → agent edits design files    │
+│  2. Invoke agent CLI → agent edits design files          │
 │  3. git commit (before evaluation, so every attempt      │
 │     is recorded)                                        │
 │  4. Run evaluation pipeline (lint → test → synth, or pnr)│
@@ -63,8 +107,9 @@ python -m autosilicon.harness.autosilicon \
 
 - Agent edits: `rtl/*.sv`, `model/*.py`
 - Pipeline: `make lint` → `make test` → `make synth-one`
-- Optimizes: gate_count (min) × estimated_fmax (max)
+- Optimizes: area (min) × estimated_fmax (max)
 - Hard gate: tests must pass
+- Scope: one canonical default synthesis configuration per experiment
 
 ### Backend (`--mode be`)
 
@@ -92,19 +137,29 @@ Copy a template to `<design-dir>/program.md` and customize for your design.
 |------|---------|-------------|
 | `--mode` | required | `fe` or `be` |
 | `--design-dir` | required | Path to the design git repo |
-| `--max-experiments` | 0 (infinite) | Stop after N experiments |
+| `--max-experiments` | 0 (infinite) | Run at most N new experiments in this invocation |
+| `--agent-timeout` | 900s | Timeout per agent invocation |
 | `--timeout-per-run` | 1800s | Timeout per evaluation run |
 | `--program-md` | `<design-dir>/program.md` | Path to program.md |
+| `--artifacts-dir` | `<design-dir>` | Directory where run artifacts are written |
 | `--log-file` | `<design-dir>/autosilicon.log` | Run log path |
-| `--claude-model` | (default) | Claude model override |
+| `--status-file` | `<design-dir>/autosilicon_status.json` | Live status JSON path |
+| `--agent-cli` | `claude` | Agent runner: `claude` or `codex` |
+| `--agent-model` | (default) | Model override for the selected agent CLI |
+| `--claude-model` | (default) | Deprecated alias for `--agent-model` when using Claude |
+| `--dry-run` | off | Validate prompt + run wiring without invoking the agent |
 
 ## Output files
 
 | File | Description |
 |------|-------------|
 | `results.tsv` | Append-only experiment log (NOT committed to git) |
-| `pareto_frontier.json` | Current Pareto frontier points |
+| `pareto_frontier.json` | Current Pareto frontier over verified default-config runs |
 | `autosilicon.log` | Full run log with timestamps |
+| `autosilicon_status.json` | Live run metadata for dashboards and monitoring |
+| `.autosilicon_prompt.txt` | The exact prompt for the current/last experiment |
+
+If `--artifacts-dir` is set, all of the files above are written under that directory instead of the design root. This is the cleanest way to keep multiple lineages in one repo without mixing their evidence.
 
 ## Architecture
 

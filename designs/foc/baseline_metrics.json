@@ -1,0 +1,12 @@
+{
+  "commit": "5739030",
+  "config": "default",
+  "measured_on": "2026-03-17",
+  "metrics": {
+    "area": 215163.8592,
+    "cell_count": 34520,
+    "estimated_fmax_mhz": 171.21176841211357,
+    "gate_count": 34520
+  },
+  "notes": "Synthesized with the current infra/synth_sweep.py single-config flow for canonical frontend comparison."
+}
