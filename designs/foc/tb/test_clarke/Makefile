@@ -4,6 +4,7 @@ VENV := $(PROJ_ROOT)/.venv
 SHELL := /bin/bash
 export PATH := $(VENV)/bin:$(PATH)
 
+include $(DESIGN_DIR)/tb/common/params.mk
 
 SIM ?= icarus
 TOPLEVEL_LANG ?= verilog
@@ -13,7 +14,7 @@ TOPLEVEL = foc_clarke
 MODULE = test_clarke
 
 COMPILE_ARGS += -g2012
-COMPILE_ARGS += -Pfoc_clarke.DATA_W=16 -Pfoc_clarke.FRAC_W=15
+COMPILE_ARGS += -Pfoc_clarke.DATA_W=$(DATA_W) -Pfoc_clarke.FRAC_W=$(FRAC_W)
 
 export PYTHONPATH := $(DESIGN_DIR)/tb/common:$(DESIGN_DIR)/model:$(PROJ_ROOT)/infra
 

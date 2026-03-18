@@ -16,13 +16,15 @@ from tb_utils import (  # noqa: E402
     assert_close, assert_close_ulp, start_clock, reset_dut, get_logger,
 )
 
-# FOC default parameters (matching foc_pkg.sv defaults)
-DATA_W = 16
-FRAC_W = 15
-PWM_BITS = 10
-ANGLE_W = 16
-PI_ACC_W = 32
-CORDIC_ITERS = 16
+# FOC parameters — read from environment (set by Makefile) or use defaults
+DATA_W = int(os.environ.get("DATA_W", 16))
+FRAC_W = int(os.environ.get("FRAC_W", 15))
+PWM_BITS = int(os.environ.get("PWM_BITS", 10))
+ANGLE_W = int(os.environ.get("ANGLE_W", 16))
+PI_ACC_W = int(os.environ.get("PI_ACC_W", 2 * DATA_W))
+CORDIC_ITERS = int(os.environ.get("CORDIC_ITERS", 16))
+PIPE_DEPTH = int(os.environ.get("PIPE_DEPTH", 1))
+SHARED_MUL = int(os.environ.get("SHARED_MUL", 0))
 
 # Derived constants
 SCALE = 1 << FRAC_W
@@ -31,9 +33,13 @@ MIN_INT = -(1 << (DATA_W - 1))
 PWM_MAX = (1 << PWM_BITS) - 1
 HALF_SCALE = 1 << (PWM_BITS - 1)
 
-# Fixed-point constants from spec
-INV_K_Q15 = 0x4DBA      # 1/K CORDIC gain, Q1.15
-INV_SQRT3_Q15 = 0x49E7  # 1/sqrt(3), Q1.15
+# Fixed-point constants scaled to current FRAC_W
+INV_K = round(0.607253 * (1 << FRAC_W))    # 1/K CORDIC gain
+INV_SQRT3 = round(0.577350 * (1 << FRAC_W))  # 1/sqrt(3)
+
+# Legacy aliases
+INV_K_Q15 = INV_K
+INV_SQRT3_Q15 = INV_SQRT3
 
 
 # ---------------------------------------------------------------------------

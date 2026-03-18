@@ -4,6 +4,7 @@ VENV := $(PROJ_ROOT)/.venv
 SHELL := /bin/bash
 export PATH := $(VENV)/bin:$(PATH)
 
+include $(DESIGN_DIR)/tb/common/params.mk
 
 SIM ?= icarus
 TOPLEVEL_LANG ?= verilog
@@ -13,8 +14,8 @@ TOPLEVEL = foc_cordic
 MODULE = test_cordic
 
 COMPILE_ARGS += -g2012
-COMPILE_ARGS += -Pfoc_cordic.DATA_W=16 -Pfoc_cordic.FRAC_W=15
-COMPILE_ARGS += -Pfoc_cordic.ANGLE_W=16 -Pfoc_cordic.CORDIC_ITERS=16
+COMPILE_ARGS += -Pfoc_cordic.DATA_W=$(DATA_W) -Pfoc_cordic.FRAC_W=$(FRAC_W)
+COMPILE_ARGS += -Pfoc_cordic.ANGLE_W=$(ANGLE_W) -Pfoc_cordic.CORDIC_ITERS=$(CORDIC_ITERS)
 
 export PYTHONPATH := $(DESIGN_DIR)/tb/common:$(DESIGN_DIR)/model:$(PROJ_ROOT)/infra
 

@@ -70,32 +70,40 @@ golden-fixedpoint:
 TB_DIR := $(DESIGN_DIR)/tb
 VENV_PATH := $(PROJ_ROOT)/.venv/bin
 
+# Parameter overrides: make test DATA_W=12 FRAC_W=11 CORDIC_ITERS=8
+PARAM_ARGS = DATA_W=$(DATA_W) FRAC_W=$(FRAC_W) CORDIC_ITERS=$(CORDIC_ITERS) \
+             PIPE_DEPTH=$(PIPE_DEPTH) PWM_BITS=$(PWM_BITS) SHARED_MUL=$(SHARED_MUL) \
+             ANGLE_W=$(ANGLE_W) PI_ACC_W=$(PI_ACC_W)
+
+# Include param defaults
+include $(TB_DIR)/common/params.mk
+
 test: test-cordic test-clarke test-park test-pi test-svpwm test-foc-top
 	@echo "All FOC cocotb tests passed."
 
 test-cordic:
-	@echo "Running CORDIC tests..."
-	PATH=$(VENV_PATH):$$PATH $(MAKE) -C $(TB_DIR)/test_cordic
+	@echo "Running CORDIC tests (DW=$(DATA_W) CI=$(CORDIC_ITERS))..."
+	PATH=$(VENV_PATH):$$PATH $(MAKE) -C $(TB_DIR)/test_cordic $(PARAM_ARGS)
 
 test-clarke:
-	@echo "Running Clarke tests..."
-	PATH=$(VENV_PATH):$$PATH $(MAKE) -C $(TB_DIR)/test_clarke
+	@echo "Running Clarke tests (DW=$(DATA_W))..."
+	PATH=$(VENV_PATH):$$PATH $(MAKE) -C $(TB_DIR)/test_clarke $(PARAM_ARGS)
 
 test-park:
-	@echo "Running Park tests..."
-	PATH=$(VENV_PATH):$$PATH $(MAKE) -C $(TB_DIR)/test_park
+	@echo "Running Park tests (DW=$(DATA_W))..."
+	PATH=$(VENV_PATH):$$PATH $(MAKE) -C $(TB_DIR)/test_park $(PARAM_ARGS)
 
 test-pi:
-	@echo "Running PI controller tests..."
-	PATH=$(VENV_PATH):$$PATH $(MAKE) -C $(TB_DIR)/test_pi
+	@echo "Running PI controller tests (DW=$(DATA_W))..."
+	PATH=$(VENV_PATH):$$PATH $(MAKE) -C $(TB_DIR)/test_pi $(PARAM_ARGS)
 
 test-svpwm:
-	@echo "Running SVPWM tests..."
-	PATH=$(VENV_PATH):$$PATH $(MAKE) -C $(TB_DIR)/test_svpwm
+	@echo "Running SVPWM tests (DW=$(DATA_W))..."
+	PATH=$(VENV_PATH):$$PATH $(MAKE) -C $(TB_DIR)/test_svpwm $(PARAM_ARGS)
 
 test-foc-top:
-	@echo "Running FOC top integration tests..."
-	PATH=$(VENV_PATH):$$PATH $(MAKE) -C $(TB_DIR)/test_foc_top
+	@echo "Running FOC top integration tests (DW=$(DATA_W))..."
+	PATH=$(VENV_PATH):$$PATH $(MAKE) -C $(TB_DIR)/test_foc_top $(PARAM_ARGS)
 
 # ── Synthesis ─────────────────────────────────────────────────
 synth-one:

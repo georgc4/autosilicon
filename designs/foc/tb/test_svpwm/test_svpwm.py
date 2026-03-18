@@ -13,12 +13,12 @@ from foc_tb_utils import (
     start_clock, reset_dut, get_logger,
     foc_to_fixed, foc_from_fixed, foc_to_unsigned, foc_to_signed,
     assert_close_ulp,
-    DATA_W, FRAC_W, PWM_BITS, PWM_MAX, HALF_SCALE,
+    DATA_W, FRAC_W, PWM_BITS, PWM_MAX, HALF_SCALE, CORDIC_ITERS, PI_ACC_W,
 )
 from foc_fixed_point import FixedPointConfig, svpwm_fixed, to_fixed
 
 LOG = get_logger("svpwm")
-CFG = FixedPointConfig()
+CFG = FixedPointConfig(data_w=DATA_W, frac_w=FRAC_W, cordic_iters=CORDIC_ITERS, pwm_bits=PWM_BITS, pi_acc_w=PI_ACC_W)
 
 # SVPWM latency: 4-8 cycles (from microarch)
 SVPWM_MAX_LATENCY = 15

@@ -4,6 +4,7 @@ VENV := $(PROJ_ROOT)/.venv
 SHELL := /bin/bash
 export PATH := $(VENV)/bin:$(PATH)
 
+include $(DESIGN_DIR)/tb/common/params.mk
 
 SIM ?= icarus
 TOPLEVEL_LANG ?= verilog
@@ -13,7 +14,7 @@ TOPLEVEL = foc_park
 MODULE = test_park
 
 COMPILE_ARGS += -g2012
-COMPILE_ARGS += -Pfoc_park.DATA_W=16 -Pfoc_park.FRAC_W=15
+COMPILE_ARGS += -Pfoc_park.DATA_W=$(DATA_W) -Pfoc_park.FRAC_W=$(FRAC_W)
 
 export PYTHONPATH := $(DESIGN_DIR)/tb/common:$(DESIGN_DIR)/model:$(PROJ_ROOT)/infra
 

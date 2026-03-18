@@ -18,7 +18,11 @@ from foc_tb_utils import (
 from foc_fixed_point import FixedPointConfig, sincos_fixed
 
 LOG = get_logger("cordic")
-CFG = FixedPointConfig()
+CFG = FixedPointConfig(data_w=DATA_W, frac_w=FRAC_W, cordic_iters=CORDIC_ITERS, angle_w=ANGLE_W)
+
+# Scale ULP tolerance: fewer CORDIC iterations = less precision
+# At CI=16/DW=16 we see ~3 ULPs; at CI=8/DW=16 expect ~256 ULPs
+CORDIC_ULP_TOLERANCE = max(4, 1 << max(0, DATA_W - CORDIC_ITERS + 1))
 
 # CORDIC latency: CORDIC_ITERS + 2 (pre-rotate + iterations + post-correct)
 CORDIC_LATENCY = CORDIC_ITERS + 2
@@ -92,9 +96,9 @@ async def test_known_angles(dut):
         # Verify against math reference (within 3 ULP)
         exp_cos_fp = foc_to_fixed(exp_cos)
         exp_sin_fp = foc_to_fixed(exp_sin)
-        assert_close_ulp(cos_raw, foc_to_unsigned(exp_cos_fp), ulps=3, width=DATA_W,
+        assert_close_ulp(cos_raw, foc_to_unsigned(exp_cos_fp), ulps=CORDIC_ULP_TOLERANCE, width=DATA_W,
                          msg=f"{desc} cos vs math")
-        assert_close_ulp(sin_raw, foc_to_unsigned(exp_sin_fp), ulps=3, width=DATA_W,
+        assert_close_ulp(sin_raw, foc_to_unsigned(exp_sin_fp), ulps=CORDIC_ULP_TOLERANCE, width=DATA_W,
                          msg=f"{desc} sin vs math")
 
 

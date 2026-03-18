@@ -4,6 +4,7 @@ VENV := $(PROJ_ROOT)/.venv
 SHELL := /bin/bash
 export PATH := $(VENV)/bin:$(PATH)
 
+include $(DESIGN_DIR)/tb/common/params.mk
 
 SIM ?= icarus
 TOPLEVEL_LANG ?= verilog
@@ -13,7 +14,7 @@ TOPLEVEL = foc_svpwm
 MODULE = test_svpwm
 
 COMPILE_ARGS += -g2012
-COMPILE_ARGS += -Pfoc_svpwm.DATA_W=16 -Pfoc_svpwm.FRAC_W=15 -Pfoc_svpwm.PWM_BITS=10
+COMPILE_ARGS += -Pfoc_svpwm.DATA_W=$(DATA_W) -Pfoc_svpwm.FRAC_W=$(FRAC_W) -Pfoc_svpwm.PWM_BITS=$(PWM_BITS)
 
 export PYTHONPATH := $(DESIGN_DIR)/tb/common:$(DESIGN_DIR)/model:$(PROJ_ROOT)/infra
 

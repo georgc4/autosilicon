@@ -19,7 +19,7 @@ from foc_tb_utils import (
 from foc_fixed_point import FixedPointConfig, clarke_fixed, to_fixed
 
 LOG = get_logger("clarke")
-CFG = FixedPointConfig()
+CFG = FixedPointConfig(data_w=DATA_W, frac_w=FRAC_W)
 
 # Clarke transform latency (from microarch: 2 cycles)
 CLARKE_LATENCY = 2

@@ -12,12 +12,12 @@ from foc_tb_utils import (
     start_clock, reset_dut, get_logger,
     foc_to_fixed, foc_from_fixed, foc_to_unsigned, foc_to_signed,
     assert_close_ulp,
-    DATA_W, FRAC_W, PI_ACC_W,
+    DATA_W, FRAC_W, PI_ACC_W, CORDIC_ITERS, PWM_BITS,
 )
 from foc_fixed_point import FixedPointConfig, pi_fixed, to_fixed, from_fixed
 
 LOG = get_logger("pi")
-CFG = FixedPointConfig()
+CFG = FixedPointConfig(data_w=DATA_W, frac_w=FRAC_W, cordic_iters=CORDIC_ITERS, pwm_bits=PWM_BITS, pi_acc_w=PI_ACC_W)
 
 # PI latency: 4 cycles (from microarch)
 PI_LATENCY = 4

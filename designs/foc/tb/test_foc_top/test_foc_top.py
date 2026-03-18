@@ -30,7 +30,7 @@ from foc_fixed_point import (
 )
 
 LOG = get_logger("foc_top")
-CFG = FixedPointConfig()
+CFG = FixedPointConfig(data_w=DATA_W, frac_w=FRAC_W, cordic_iters=CORDIC_ITERS, pwm_bits=PWM_BITS, pi_acc_w=PI_ACC_W)
 
 
 async def init_foc_top(dut):

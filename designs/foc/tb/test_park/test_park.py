@@ -14,14 +14,14 @@ from foc_tb_utils import (
     start_clock, reset_dut, get_logger,
     foc_to_fixed, foc_from_fixed, foc_to_unsigned, foc_to_signed,
     assert_close_ulp, angle_to_uint16,
-    DATA_W, FRAC_W,
+    DATA_W, FRAC_W, CORDIC_ITERS, PWM_BITS, PI_ACC_W,
 )
 from foc_fixed_point import (
     FixedPointConfig, park_fixed, inv_park_fixed, sincos_fixed, to_fixed,
 )
 
 LOG = get_logger("park")
-CFG = FixedPointConfig()
+CFG = FixedPointConfig(data_w=DATA_W, frac_w=FRAC_W, cordic_iters=CORDIC_ITERS, pwm_bits=PWM_BITS, pi_acc_w=PI_ACC_W)
 
 # Park latency: 2-6 cycles depending on config (spec: 2 for dedicated mul)
 PARK_MAX_LATENCY = 10
